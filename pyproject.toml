@@ -1,0 +1,32 @@
+[tool.pdm]
+[tool.pdm.dev-dependencies]
+test = [
+    "pytest>=7.3.1",
+]
+lint = [
+    "flake8>=5.0.4",
+]
+
+[tool.pytest.ini_options]
+log_cli = true
+log_cli_level = "INFO"
+log_cli_format = "%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)"
+log_cli_date_format = "%Y-%m-%d %H:%M:%S"
+
+[project]
+name = "postgres-tq"
+version = "0.0.0"
+description = "Postgres Based Task Queue"
+authors = [
+    {name = "Harika", email = "harika.duyu@gmail.com"},
+]
+dependencies = [
+    "psycopg[binary]>=3.1.8",
+]
+requires-python = ">=3.8"
+readme = "README.md"
+license = {text = "MIT"}
+
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
