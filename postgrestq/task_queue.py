@@ -276,29 +276,9 @@ class TaskQueue:
         for row in expired_tasks:
             task_id = row[0]
             logger.info(f"Got expired task with id {task_id}")
-            with self.conn.cursor() as cur:
-                cur.execute(f"""
-                    UPDATE {self._table_name}
-                    SET ttl = ttl - 1,
-                        processing = false,
-                        deadline = NULL
-                    WHERE id = (
-                        SELECT id
-                        FROM {self._table_name}
-                        WHERE completed_at IS NULL
-                            AND processing = true
-                            AND queue_name = %s
-                            AND id = %s
-                        FOR UPDATE SKIP LOCKED
-                        LIMIT 1
-                    )
-                    RETURNING task, ttl;
+            task, ttl = self.get_updated_expired_task(task_id)
 
-                """, (self._queue_name, task_id,))
-                updated_row = cur.fetchone()
-
-            if updated_row is None:
-                # TODO add a test
+            if task is None:
                 # race condition! between the time we got `key` from the
                 # set of tasks (this outer loop) and the time we tried
                 # to get that task from the queue, it has been completed
@@ -307,9 +287,6 @@ class TaskQueue:
                 logger.info(f"Task {task_id} was marked completed while we "
                             "checked for expired leases, nothing to do.")
                 continue
-
-            wrapped_task, ttl = updated_row
-            task = self._serialize(wrapped_task['task'])
 
             if ttl <= 0:
                 logger.error(f'Job {task} with id {task_id} '
@@ -321,6 +298,48 @@ class TaskQueue:
                 if self.ttl_zero_callback:
                     self.ttl_zero_callback(task_id, task)
             self.conn.commit()
+
+    def get_updated_expired_task(self, task_id):
+        """
+        Given the id of an expired task, it tries to reschedule the
+        task by marking it as not processing, resetting the deadline
+        and decreaasing TTL by one. It returns None if the task is
+        already updated or (being updated) by another worker.
+
+        Returns
+        -------
+        (task, ttl) :
+            The updated task and ttl values for the expired task with
+            task_id after it's rescheduled
+
+        """
+        with self.conn.cursor() as cur:
+            cur.execute(f"""
+                UPDATE {self._table_name}
+                SET ttl = ttl - 1,
+                    processing = false,
+                    deadline = NULL
+                WHERE id = (
+                    SELECT id
+                    FROM {self._table_name}
+                    WHERE completed_at IS NULL
+                        AND processing = true
+                        AND queue_name = %s
+                        AND id = %s
+                    FOR UPDATE SKIP LOCKED
+                    LIMIT 1
+                )
+                RETURNING task, ttl;
+
+            """, (self._queue_name, task_id,))
+            updated_row = cur.fetchone()
+
+            if updated_row is None:
+                return None, None
+
+            wrapped_task, ttl = updated_row
+            task = self._serialize(wrapped_task['task'])
+            return task, ttl
 
     def _serialize(self, task):
         task = json.dumps(task, sort_keys=True)

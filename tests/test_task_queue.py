@@ -257,27 +257,26 @@ def test_iterator(taskqueue):
     assert found_tasks == ['bla', 'blip']
 
 
-@pytest.mark.skip
 def test_expired_leases_race(taskqueue, monkeypatch, caplog):
     # save the original conn.get so we can use it inside the mock
-    get_orig = taskqueue.conn.get
+    get_orig = taskqueue.get_updated_expired_task
 
     # simulate a race condition in _check_expired_leases where we can
     # still see a task in the set of tasks but by the time we try to get
     # it from the queue it has been completed, i.e. is None
-    def mock_get(key):
-        # removes all traces of our task in all queues, etc.
-        # there is no other way to "complete" the task without calling
-        # conn.get at some point which conflics with this mock.
-        taskqueue._reset()
-        return get_orig(key)
+    def mock_get(task_id):
+        # marks the task as complete before trying to update the task
+        # before trying to update the task
+        taskqueue.complete(task_id)
+        return get_orig(task_id)
 
     taskqueue.add('foo', LEASE_TIMEOUT)
 
     # move task to processing queue
     taskqueue.get()
+    time.sleep(LEASE_TIMEOUT + 0.1)
 
-    monkeypatch.setattr(taskqueue.conn, 'get', mock_get)
+    monkeypatch.setattr(taskqueue, 'get_updated_expired_task', mock_get)
     caplog.set_level(logging.INFO)
     taskqueue._check_expired_leases()
     assert "marked completed while we checked for" in caplog.text
