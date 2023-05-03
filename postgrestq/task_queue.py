@@ -191,9 +191,7 @@ class TaskQueue:
                     FOR UPDATE SKIP LOCKED
                     LIMIT 1
                 )
-                RETURNING id, task;""",
-                (self._queue_name,),
-            )
+                RETURNING id, task;""", (self._queue_name,),)
 
             row = cur.fetchone()
             if row is None:
@@ -228,9 +226,7 @@ class TaskQueue:
                 UPDATE {self._table_name}
                 SET completed_at = NOW(),
                     processing = false
-                WHERE id = %s""",
-                (task_id,),
-            )
+                WHERE id = %s""", (task_id,),)
             conn.commit()
 
     def is_empty(self):
@@ -334,7 +330,6 @@ class TaskQueue:
         task = json.loads(blob)
         return task
 
-
     def reschedule(self, task_id):
         """Move a task back from the processing- to the task queue.
 
@@ -372,15 +367,12 @@ class TaskQueue:
                         AND id = %s
                     FOR UPDATE SKIP LOCKED
                 )
-                RETURNING id;""",
-                (task_id,),
-            )
+                RETURNING id;""", (task_id,),)
 
             found = cur.fetchone()
             conn.commit()
             if found is None:
                 raise ValueError(f'Task {task_id} does not exist.')
-
 
     def _reset(self):
         """Delete all tasks in the DB with our queue name.
@@ -392,7 +384,6 @@ class TaskQueue:
                    WHERE queue_name = %s ", (self._queue_name,),)
 
             self.conn.commit()
-
 
     def __iter__(self):
         """Iterate over tasks and mark them as complete.

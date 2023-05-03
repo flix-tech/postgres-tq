@@ -1,6 +1,5 @@
 import logging
 import time
-import uuid
 import os
 from unittest import mock
 
@@ -9,7 +8,10 @@ import pytest
 from postgrestq import TaskQueue
 
 
-POSTGRES_DSN = os.environ.get('POSTGRES_DSN', 'postgresql://postgres:password@localhost:5432/postgres') #noqa
+POSTGRES_DSN = os.environ.get(
+    'POSTGRES_DSN',
+    'postgresql://postgres:password@localhost:5432/postgres'
+)  # noqa
 LEASE_TIMEOUT = 0.1
 
 logger = logging.getLogger(__name__)
@@ -63,7 +65,6 @@ def test_is_empty(taskqueue):
     assert taskqueue.is_empty()
 
 
-
 def test_complete(taskqueue):
     # boring case
     taskqueue.add('foo', LEASE_TIMEOUT, ttl=1)
@@ -81,7 +82,6 @@ def test_complete(taskqueue):
     assert taskqueue.is_empty()
 
 
-
 def test_expired(taskqueue):
     taskqueue.add('foo', LEASE_TIMEOUT, ttl=1)
     taskqueue.get()
@@ -97,7 +97,6 @@ def test_expired(taskqueue):
         taskqueue.get()
     tend = time.time()
     assert tend - tstart > LEASE_TIMEOUT
-
 
 
 def test_ttl(taskqueue, caplog):
@@ -120,7 +119,6 @@ def test_ttl(taskqueue, caplog):
     caplog.clear()
     assert taskqueue.is_empty()
     assert "failed too many times" in caplog.text
-
 
 
 def test_callback(taskqueue):
@@ -150,7 +148,6 @@ def test_callback(taskqueue):
     assert mock_cb.called
 
 
-
 def test_reschedule(taskqueue):
     taskqueue.add('foo', LEASE_TIMEOUT)
     _, id_ = taskqueue.get()
@@ -162,11 +159,9 @@ def test_reschedule(taskqueue):
     assert task == 'foo'
 
 
-
 def test_reschedule_error(taskqueue):
     with pytest.raises(ValueError):
         taskqueue.reschedule('bar')
-
 
 
 def test_full(taskqueue):
@@ -184,7 +179,6 @@ def test_full(taskqueue):
             break
 
     assert counter == len(TASKS)
-
 
 
 def test_complete_rescheduled_task(taskqueue):
@@ -231,7 +225,6 @@ def test_tolerate_double_completion(taskqueue):
     assert taskqueue.is_empty()
 
 
-
 def test_task_queue_len(taskqueue):
 
     # empty queue
@@ -254,7 +247,6 @@ def test_task_queue_len(taskqueue):
     assert len(taskqueue) == 0
 
 
-
 def test_iterator(taskqueue):
     taskqueue.add('bla', LEASE_TIMEOUT, ttl=3)
     taskqueue.add('blip', LEASE_TIMEOUT, ttl=3)
@@ -265,25 +257,25 @@ def test_iterator(taskqueue):
     assert found_tasks == ['bla', 'blip']
 
 
+@pytest.mark.skip
+def test_expired_leases_race(taskqueue, monkeypatch, caplog):
+    # save the original conn.get so we can use it inside the mock
+    get_orig = taskqueue.conn.get
 
-# def test_expired_leases_race(taskqueue, monkeypatch, caplog):
-#     # save the original conn.get so we can use it inside the mock
-#     get_orig = taskqueue.conn.get
+    # simulate a race condition in _check_expired_leases where we can
+    # still see a task in the set of tasks but by the time we try to get
+    # it from the queue it has been completed, i.e. is None
+    def mock_get(key):
+        # removes all traces of our task in all queues, etc.
+        # there is no other way to "complete" the task without calling
+        # conn.get at some point which conflics with this mock.
+        taskqueue._reset()
+        return get_orig(key)
 
-#     # simulate a race condition in _check_expired_leases where we can
-#     # still see a task in the set of tasks but by the time we try to get
-#     # it from the queue it has been completed, i.e. is None
-#     def mock_get(key):
-#         # removes all traces of our task in all queues, etc.
-#         # there is no other way to "complete" the task without calling
-#         # conn.get at some point which conflics with this mock.
-#         taskqueue._reset()
-#         return get_orig(key)
+    taskqueue.add('foo', LEASE_TIMEOUT)
 
-#     taskqueue.add('foo', LEASE_TIMEOUT)
-
-#     # move task to processing queue
-#     taskqueue.get()
+    # move task to processing queue
+    taskqueue.get()
 
     monkeypatch.setattr(taskqueue.conn, 'get', mock_get)
     caplog.set_level(logging.INFO)
@@ -291,11 +283,9 @@ def test_iterator(taskqueue):
     assert "marked completed while we checked for" in caplog.text
 
 
-
 def test_lease_timeout_is_none(taskqueue):
     with pytest.raises(TypeError):
         taskqueue.add('bla', lease_timeout=None)
-
 
 
 def test_lease_timeout_is_not_float_or_int(taskqueue):
