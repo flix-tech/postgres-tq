@@ -16,6 +16,7 @@ class TaskQueue:
         queue_name: str,
         table_name: str = 'task_queue',
         reset: bool = False,
+        create_table: bool = False,
         ttl_zero_callback=None
     ):
         """Initialize the task queue.
@@ -35,6 +36,9 @@ class TaskQueue:
         reset : bool
             If true, reset existing tasks in the DB that have `queue_name` as
             the queue_name.
+        create_table : bool
+            If set to true it creates the table in the DB, it's nice to have
+            if you are running the tests with a dummy DB
         ttl_zero_callback : callable
             a function that is called if a task's ttl <= 0. The callback
             needs to accept two parameters, the task_id and the task.
@@ -48,7 +52,8 @@ class TaskQueue:
         self.ttl_zero_callback = ttl_zero_callback
 
         self.connect()
-        self._create_queue_table()
+        if create_table:
+            self._create_queue_table()
 
         if reset:
             self._reset()

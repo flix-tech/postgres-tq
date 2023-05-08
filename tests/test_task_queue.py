@@ -10,7 +10,7 @@ from postgrestq import TaskQueue
 
 POSTGRES_DSN = os.environ.get(
     'POSTGRES_DSN',
-    'postgresql://postgres:password@localhost:5432/postgres'
+    'postgresql://postgres:password@localhost:15432/postgres'
 )  # noqa
 LEASE_TIMEOUT = 0.1
 
@@ -20,10 +20,14 @@ logger = logging.getLogger(__name__)
 @pytest.fixture
 def taskqueue():
 
-    # queue_name = str(uuid.uuid4())
     queue_name = 'test_queue'
 
-    tq = TaskQueue(POSTGRES_DSN, queue_name)
+    tq = TaskQueue(
+        POSTGRES_DSN,
+        queue_name,
+        reset=True,
+        create_table=True
+    )
 
     yield tq
 
@@ -258,7 +262,7 @@ def test_iterator(taskqueue):
 
 
 def test_expired_leases_race(taskqueue, monkeypatch, caplog):
-    # save the original conn.get so we can use it inside the mock
+    # save the original function so we can use it inside the mock
     get_orig = taskqueue.get_updated_expired_task
 
     # simulate a race condition in _check_expired_leases where we can
