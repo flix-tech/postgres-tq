@@ -287,10 +287,10 @@ class TaskQueue:
                         (self._queue_name,))
             expired_tasks = cur.fetchall()
             self.conn.commit()
-            logger.info(f"Expired tasks {expired_tasks}")
+            logger.debug(f"Expired tasks {expired_tasks}")
         for row in expired_tasks:
             task_id = row[0]
-            logger.info(f"Got expired task with id {task_id}")
+            logger.debug(f"Got expired task with id {task_id}")
             task, ttl = self.get_updated_expired_task(task_id)
 
             if task is None:
@@ -420,9 +420,10 @@ class TaskQueue:
         """
         with self.conn.cursor() as cursor:
             cursor.execute(
-                sql.SQL("DELETE FROM {} WHERE queue_name = %s ")
-                    .format(sql.Identifier(self._table_name)),
-                    (self._queue_name,),)
+                sql.SQL(
+                    "DELETE FROM {} WHERE queue_name = %s "
+                ).format(sql.Identifier(self._table_name)),
+                (self._queue_name,),)
 
             self.conn.commit()
 
