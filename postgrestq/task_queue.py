@@ -3,7 +3,7 @@ import logging
 # import time
 from uuid import uuid4, UUID
 
-import psycopg as pg
+from psycopg import sql, connect
 
 
 logger = logging.getLogger(__name__)
@@ -63,7 +63,7 @@ class TaskQueue:
         Establish a connection to Postgres.
         If a connection already exists, it's overwritten.
         """
-        self.conn = pg.connect(self._dsn)
+        self.conn = connect(self._dsn)
 
     def _create_queue_table(self):
         """
@@ -72,31 +72,32 @@ class TaskQueue:
         # TODO: check if the table already exist
         # whether it has the same schema
         with self.conn.cursor() as cur:
-            cur.execute(f"""
-                CREATE TABLE IF NOT EXISTS {self._table_name} (
-                        id UUID PRIMARY KEY,
-                        queue_name TEXT NOT NULL,
-                        task JSONB NOT NULL,
-                        ttl INT NOT NULL,
-                        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-                        processing BOOLEAN NOT NULL DEFAULT false,
-                        lease_timeout FLOAT,
-                        deadline TIMESTAMP,
-                        completed_at TIMESTAMP
-                    )
-            """)
+            cur.execute(sql.SQL(
+                """CREATE TABLE IF NOT EXISTS  {} (
+                            id UUID PRIMARY KEY,
+                            queue_name TEXT NOT NULL,
+                            task JSONB NOT NULL,
+                            ttl INT NOT NULL,
+                            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                            processing BOOLEAN NOT NULL DEFAULT false,
+                            lease_timeout FLOAT,
+                            deadline TIMESTAMP,
+                            completed_at TIMESTAMP
+                        )"""
+                    ).format(sql.Identifier(self._table_name)))
 
     def __len__(self):
         """
         Returns the length of processing or to be processed tasks
         """
         with self.conn.cursor() as cursor:
-            cursor.execute(f"""
+            cursor.execute(sql.SQL("""
                 SELECT count(1) as count
-                FROM {self._table_name}
-                WHERE queue_name = '{self._queue_name}'
+                FROM {}
+                WHERE queue_name = %s
                     AND completed_at IS NULL
-            """)
+            """).format(sql.Identifier(self._table_name)),
+                (self._queue_name,))
             count = cursor.fetchone()[0]
             self.conn.commit()
             return count
@@ -128,8 +129,8 @@ class TaskQueue:
 
         with self.conn.cursor() as cursor:
             # store the task + metadata and put task-id into the task queue
-            cursor.execute("""
-                INSERT INTO task_queue (
+            cursor.execute(sql.SQL("""
+                INSERT INTO {} (
                     id,
                     queue_name,
                     task,
@@ -137,7 +138,8 @@ class TaskQueue:
                     lease_timeout
                 )
                 VALUES (%s, %s, %s, %s, %s)
-            """, (id_, self._queue_name, task, ttl, lease_timeout))
+            """).format(sql.Identifier(self._table_name)),
+                (id_, self._queue_name, task, ttl, lease_timeout))
             self.conn.commit()
 
     def get(self):
@@ -180,14 +182,14 @@ class TaskQueue:
 
         with conn.cursor() as cur:
 
-            cur.execute(f"""
-                UPDATE {self._table_name}
+            cur.execute(sql.SQL("""
+                UPDATE {}
                 SET processing = true,
                     deadline =
                         NOW() + CAST(lease_timeout || ' seconds' AS INTERVAL)
                 WHERE id = (
                     SELECT id
-                    FROM {self._table_name}
+                    FROM {}
                     WHERE completed_at IS NULL
                         AND processing = false
                         AND queue_name = %s
@@ -196,7 +198,12 @@ class TaskQueue:
                     FOR UPDATE SKIP LOCKED
                     LIMIT 1
                 )
-                RETURNING id, task;""", (self._queue_name,),)
+                RETURNING id, task;""")
+                        .format(
+                            sql.Identifier(self._table_name),
+                            sql.Identifier(self._table_name)
+                        ),
+                        (self._queue_name,),)
 
             row = cur.fetchone()
             if row is None:
@@ -227,11 +234,13 @@ class TaskQueue:
         conn = self.conn
         with conn.cursor() as cur:
 
-            cur.execute(f"""
-                UPDATE {self._table_name}
+            cur.execute(sql.SQL("""
+                UPDATE {}
                 SET completed_at = NOW(),
                     processing = false
-                WHERE id = %s""", (task_id,),)
+                WHERE id = %s""")
+                        .format(sql.Identifier(self._table_name)),
+                        (task_id,),)
             conn.commit()
 
     def is_empty(self):
@@ -266,15 +275,16 @@ class TaskQueue:
         # goes through all the tasks that are marked as processing
         # and check the ones with expired timeout
         with self.conn.cursor() as cur:
-            cur.execute(f"""
+            cur.execute(sql.SQL("""
                 SELECT id
-                FROM {self._table_name}
+                FROM {}
                 WHERE completed_at IS NULL
                     AND processing = true
                     AND queue_name = %s
                     AND deadline < NOW()
                 ORDER BY created_at;
-            """, (self._queue_name,))
+            """).format(sql.Identifier(self._table_name)),
+                        (self._queue_name,))
             expired_tasks = cur.fetchall()
             self.conn.commit()
             logger.info(f"Expired tasks {expired_tasks}")
@@ -319,14 +329,14 @@ class TaskQueue:
 
         """
         with self.conn.cursor() as cur:
-            cur.execute(f"""
-                UPDATE {self._table_name}
+            cur.execute(sql.SQL("""
+                UPDATE {}
                 SET ttl = ttl - 1,
                     processing = false,
                     deadline = NULL
                 WHERE id = (
                     SELECT id
-                    FROM {self._table_name}
+                    FROM {}
                     WHERE completed_at IS NULL
                         AND processing = true
                         AND queue_name = %s
@@ -335,8 +345,11 @@ class TaskQueue:
                     LIMIT 1
                 )
                 RETURNING task, ttl;
-
-            """, (self._queue_name, task_id,))
+            """).format(
+                            sql.Identifier(self._table_name),
+                            sql.Identifier(self._table_name)
+                        ),
+                        (self._queue_name, task_id,))
             updated_row = cur.fetchone()
 
             if updated_row is None:
@@ -380,18 +393,21 @@ class TaskQueue:
         conn = self.conn
         with conn.cursor() as cur:
 
-            cur.execute(f"""
-                UPDATE {self._table_name}
+            cur.execute(sql.SQL("""
+                UPDATE {}
                 SET processing = false,
                     deadline = NULL
                 WHERE id = (
                     SELECT id
-                    FROM {self._table_name}
+                    FROM {}
                     WHERE processing = true
                         AND id = %s
                     FOR UPDATE SKIP LOCKED
                 )
-                RETURNING id;""", (task_id,),)
+                RETURNING id;""").format(
+                            sql.Identifier(self._table_name),
+                            sql.Identifier(self._table_name)
+                        ), (task_id,),)
 
             found = cur.fetchone()
             conn.commit()
@@ -404,8 +420,9 @@ class TaskQueue:
         """
         with self.conn.cursor() as cursor:
             cursor.execute(
-                f"DELETE FROM {self._table_name} \
-                   WHERE queue_name = %s ", (self._queue_name,),)
+                sql.SQL("DELETE FROM {} WHERE queue_name = %s ")
+                    .format(sql.Identifier(self._table_name)),
+                    (self._queue_name,),)
 
             self.conn.commit()
 
