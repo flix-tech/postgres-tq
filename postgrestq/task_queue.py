@@ -1,7 +1,8 @@
 import json
 import logging
-# import time
+
 from uuid import uuid4, UUID
+from typing import Optional, Tuple, Iterator, Dict, Any, Callable
 
 from psycopg import sql, connect
 
@@ -17,7 +18,7 @@ class TaskQueue:
         table_name: str = 'task_queue',
         reset: bool = False,
         create_table: bool = False,
-        ttl_zero_callback=None
+        ttl_zero_callback: Optional[Callable[[UUID, Optional[str]], None]] = None
     ):
         """Initialize the task queue.
 
@@ -58,14 +59,14 @@ class TaskQueue:
         if reset:
             self._reset()
 
-    def connect(self):
+    def connect(self) -> None:
         """
         Establish a connection to Postgres.
         If a connection already exists, it's overwritten.
         """
         self.conn = connect(self._dsn)
 
-    def _create_queue_table(self):
+    def _create_queue_table(self) -> None:
         """
         Creates a task_queue table
         """
@@ -86,7 +87,7 @@ class TaskQueue:
                         )"""
                     ).format(sql.Identifier(self._table_name)))
 
-    def __len__(self):
+    def __len__(self) -> int:
         """
         Returns the length of processing or to be processed tasks
         """
@@ -98,11 +99,17 @@ class TaskQueue:
                     AND completed_at IS NULL
             """).format(sql.Identifier(self._table_name)),
                 (self._queue_name,))
-            count = cursor.fetchone()[0]
+            row = cursor.fetchone()
+            count: int = row[0] if row else 0
             self.conn.commit()
             return count
 
-    def add(self, task, lease_timeout, ttl=3):
+    def add(
+        self,
+        task: Dict[Any, Any],
+        lease_timeout: float,
+        ttl: int = 3
+    ) -> None:
         """Add a task to the task queue.
 
         Parameters
@@ -125,7 +132,7 @@ class TaskQueue:
         wrapped_task = {
             'task': task,
         }
-        task = self._serialize(wrapped_task)
+        serialized_task = self._serialize(wrapped_task)
 
         with self.conn.cursor() as cursor:
             # store the task + metadata and put task-id into the task queue
@@ -139,10 +146,10 @@ class TaskQueue:
                 )
                 VALUES (%s, %s, %s, %s, %s)
             """).format(sql.Identifier(self._table_name)),
-                (id_, self._queue_name, task, ttl, lease_timeout))
+                (id_, self._queue_name, serialized_task, ttl, lease_timeout))
             self.conn.commit()
 
-    def get(self):
+    def get(self) -> Tuple[Optional[Dict[Any, Any]], Optional[UUID]]:
         """Get a task from the task queue (non-blocking).
 
         This statement marks the next available task in the queue as
@@ -214,7 +221,7 @@ class TaskQueue:
             conn.commit()
             return task, task_id
 
-    def complete(self, task_id):
+    def complete(self, task_id: UUID) -> None:
         """Mark a task as completed.
 
         Marks a task as completed by setting completed_at column by
@@ -243,7 +250,7 @@ class TaskQueue:
                         (task_id,),)
             conn.commit()
 
-    def is_empty(self):
+    def is_empty(self) -> bool:
         """Check if the task queue is empty.
 
         Internally, this function also checks the currently processed
@@ -258,7 +265,7 @@ class TaskQueue:
         self._check_expired_leases()
         return len(self) == 0
 
-    def _check_expired_leases(self):
+    def _check_expired_leases(self) -> None:
         """Check for expired leases.
 
         This method goes through all tasks that are currently processed
@@ -289,11 +296,11 @@ class TaskQueue:
             self.conn.commit()
             logger.debug(f"Expired tasks {expired_tasks}")
         for row in expired_tasks:
-            task_id = row[0]
+            task_id: UUID = row[0]
             logger.debug(f"Got expired task with id {task_id}")
             task, ttl = self.get_updated_expired_task(task_id)
 
-            if task is None:
+            if ttl is None:
                 # race condition! between the time we got `key` from the
                 # set of tasks (this outer loop) and the time we tried
                 # to get that task from the queue, it has been completed
@@ -314,7 +321,10 @@ class TaskQueue:
                     self.ttl_zero_callback(task_id, task)
             self.conn.commit()
 
-    def get_updated_expired_task(self, task_id):
+    def get_updated_expired_task(
+        self,
+        task_id: UUID
+    ) -> Tuple[Optional[str], Optional[int]]:
         """
         Given the id of an expired task, it tries to reschedule the
         task by marking it as not processing, resetting the deadline
@@ -359,15 +369,13 @@ class TaskQueue:
             task = self._serialize(wrapped_task['task'])
             return task, ttl
 
-    def _serialize(self, task):
-        task = json.dumps(task, sort_keys=True)
-        return task
+    def _serialize(self, task: Any) -> str:
+        return json.dumps(task, sort_keys=True)
 
-    def _deserialize(self, blob):
-        task = json.loads(blob)
-        return task
+    def _deserialize(self, blob: str) -> Any:
+        return json.loads(blob)
 
-    def reschedule(self, task_id):
+    def reschedule(self, task_id: UUID) -> None:
         """Move a task back from the processing- to the task queue.
 
         Workers can use this method to "drop" a work unit in case of
@@ -414,7 +422,7 @@ class TaskQueue:
             if found is None:
                 raise ValueError(f'Task {task_id} does not exist.')
 
-    def _reset(self):
+    def _reset(self) -> None:
         """Delete all tasks in the DB with our queue name.
 
         """
@@ -427,7 +435,9 @@ class TaskQueue:
 
             self.conn.commit()
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[
+        Tuple[Optional[Dict[Any, Any]], Optional[UUID]]
+            ]:
         """Iterate over tasks and mark them as complete.
 
         This allows to easily iterate over the tasks to process them:
@@ -449,7 +459,7 @@ class TaskQueue:
         """
         while True:
             task, id_ = self.get()
-            if task is not None:
+            if id_ is not None:
                 yield task, id_
                 self.complete(id_)
             if self.is_empty():

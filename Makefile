@@ -1,12 +1,10 @@
-PY = python3
-VENV = .venv
+.PHONY: help
+help:
+	@echo 'Usage: make <subcommand>'
+	@echo ''
+	@echo 'Subcommands:'
+	@echo '    install       Install locally'
 
-ifeq ($(OS), Windows_NT)
-	BIN=$(VENV)/Scripts
-	PY=python.exe
-else
-	BIN=$(VENV)/bin
-endif
 
 
 .PHONY: run-postgres
@@ -18,6 +16,23 @@ rm-postgres:
 	docker kill postgres-tq-container
 	docker rm postgres-tq-container
 
+
+.PHONY: install
+install:
+	pdm install
+
 .PHONY: test
-test: $(VENV)
-	$(BIN)/python -m pytest
+test:
+	pdm install --dev
+	python -m pytest
+
+.PHONY: lint
+lint:
+	pdm install --dev
+	python -m flake8 postgrestq
+
+
+.PHONY: mypy
+mypy:
+	pdm install --dev
+	python -m mypy --strict --explicit-package-bases postgrestq

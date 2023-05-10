@@ -6,6 +6,9 @@ test = [
 lint = [
     "flake8>=5.0.4",
 ]
+mypy = [
+    "mypy>=1.2.0",
+]
 
 [tool.pytest.ini_options]
 log_cli = true
