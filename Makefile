@@ -3,7 +3,13 @@ help:
 	@echo 'Usage: make <subcommand>'
 	@echo ''
 	@echo 'Subcommands:'
-	@echo '    install       Install locally'
+	@echo '    install          Install locally'
+	@echo '    run-postgres     Run postgres locally for tests'
+	@echo '    rm-postgres      Remove local postgres instance that is created for tests'
+	@echo '    test             Run tests locally'
+	@echo '    lint             Run linter locally'
+	@echo '    mypy             Run mypy locally'
+
 
 
 
@@ -30,7 +36,6 @@ test:
 lint:
 	pdm install --dev
 	python -m flake8 postgrestq
-
 
 .PHONY: mypy
 mypy:
