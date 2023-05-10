@@ -18,7 +18,7 @@ name = "postgres-tq"
 version = "0.0.0"
 description = "Postgres Based Task Queue"
 authors = [
-    {name = "Harika", email = "harika.duyu@gmail.com"},
+    {name = "FlixTech", email = "open-source@flixbus.com"},
 ]
 dependencies = [
     "psycopg[binary]>=3.1.8",
