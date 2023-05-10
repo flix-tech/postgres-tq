@@ -18,7 +18,8 @@ class TaskQueue:
         table_name: str = 'task_queue',
         reset: bool = False,
         create_table: bool = False,
-        ttl_zero_callback: Optional[Callable[[UUID, Optional[str]], None]] = None
+        ttl_zero_callback: Optional[
+            Callable[[UUID, Optional[str]], None]] = None
     ):
         """Initialize the task queue.
 
