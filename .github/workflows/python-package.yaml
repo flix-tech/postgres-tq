@@ -74,5 +74,6 @@ jobs:
       - name: Publish package to PyPI
         run: pdm publish
         env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+          # default one, kept to be explicit
+          PDM_PUBLISH_USERNAME: __token__
+          PDM_PUBLISH_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
