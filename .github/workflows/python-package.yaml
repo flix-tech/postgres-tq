@@ -72,7 +72,7 @@ jobs:
         run: pdm install
 
       - name: Publish package to PyPI
-        run: pdm run make release
+        run: pdm publish
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
