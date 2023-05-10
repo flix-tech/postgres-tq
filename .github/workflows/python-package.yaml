@@ -33,7 +33,7 @@ jobs:
           - 3.11
 
     steps:
-      - uses: actions/checkout@v2.5.0.5.0
+      - uses: actions/checkout@v2.5.0
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v3
