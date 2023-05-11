@@ -1,3 +1,12 @@
+VENV = .venv
+
+ifeq ($(OS), Windows_NT)
+	BIN=$(VENV)/Scripts
+else
+	BIN=$(VENV)/bin
+endif
+
+
 .PHONY: help
 help:
 	@echo 'Usage: make <subcommand>'
@@ -12,7 +21,6 @@ help:
 
 
 
-
 .PHONY: run-postgres
 run-postgres:
 	docker run --name postgres-tq-container -e POSTGRES_PASSWORD=password -p 15432:5432 -d postgres
@@ -22,22 +30,25 @@ rm-postgres:
 	docker kill postgres-tq-container
 	docker rm postgres-tq-container
 
-
 .PHONY: install
 install:
 	pdm install
+	@. $(BIN)/activate
 
 .PHONY: test
 test:
 	pdm install --dev
+	@. $(BIN)/activate && \
 	python -m pytest
 
 .PHONY: lint
 lint:
 	pdm install --dev
+	@. $(BIN)/activate && \
 	python -m flake8 postgrestq
 
 .PHONY: mypy
 mypy:
 	pdm install --dev
+	@. $(BIN)/activate && \
 	python -m mypy --strict --explicit-package-bases postgrestq
