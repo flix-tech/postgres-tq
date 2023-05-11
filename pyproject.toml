@@ -18,7 +18,7 @@ log_cli_date_format = "%Y-%m-%d %H:%M:%S"
 
 [project]
 name = "postgres-tq"
-version = "0.0.0"
+version = "0.0.1"
 description = "Postgres Based Task Queue"
 authors = [
     {name = "FlixTech", email = "open-source@flixbus.com"},
