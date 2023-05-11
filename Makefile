@@ -30,14 +30,17 @@ install:
 .PHONY: test
 test:
 	pdm install --dev
+	@source .venv/bin/activate && \
 	python -m pytest
 
 .PHONY: lint
 lint:
 	pdm install --dev
+	@source .venv/bin/activate && \
 	python -m flake8 postgrestq
 
 .PHONY: mypy
 mypy:
 	pdm install --dev
+	@source .venv/bin/activate && \
 	python -m mypy --strict --explicit-package-bases postgrestq
