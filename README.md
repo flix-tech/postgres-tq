@@ -1,6 +1,5 @@
 [![postgres-tq Actions Status](https://github.com/flix-tech/postgres-tq/workflows/CI/CD%20Pipeline/badge.svg?branch=main)](https://github.com/flix-tech/postgres-tq/actions)
 [![License](https://img.shields.io/github/license/flix-tech/postgres-tq)](https://pypi.org/project/postgres-tq/)
-
 [![PyPI - Python Version](https://img.shields.io/pypi/v/postgres-tq)](https://pypi.org/project/postgres-tq/)
 
 # Postgres Task Queue
@@ -33,7 +32,7 @@ CREATE TABLE task_queue (
 
 postgres-tq is available on [PyPI][] so you can simply install via:
 
-```sh
+```bash
 $ pip install postgres-tq
 ```
 
@@ -119,7 +118,7 @@ from postgrestq import TaskQueue
 task_queue = TaskQueue(POSTGRES_CONN_STR, queue_name, reset=True)
 
 for task, id_ in taskqueue:
-    # do something with task and it automatically
+    # do something with task and it's automatically
     # marked as completed by the iterator at the end
     # of the iteration
 

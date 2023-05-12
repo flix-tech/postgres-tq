@@ -33,7 +33,6 @@ rm-postgres:
 .PHONY: install
 install:
 	pdm install
-	@. $(BIN)/activate
 
 .PHONY: test
 test:
