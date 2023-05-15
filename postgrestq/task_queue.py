@@ -132,10 +132,8 @@ class TaskQueue:
 
         # we wrap the task itself with some meta data
         id_ = str(uuid4())
-        wrapped_task = {
-            "task": task,
-        }
-        serialized_task = self._serialize(wrapped_task)
+
+        serialized_task = self._serialize(task)
 
         with self.conn.cursor() as cursor:
             # store the task + metadata and put task-id into the task queue
@@ -224,8 +222,7 @@ class TaskQueue:
             row = cur.fetchone()
             if row is None:
                 return None, None
-            task_id, wrapped_task = row
-            task = wrapped_task["task"]
+            task_id, task = row
             logger.info(f"Got task with id {task_id}")
             conn.commit()
             return task, task_id
@@ -390,8 +387,8 @@ class TaskQueue:
             if updated_row is None:
                 return None, None
 
-            wrapped_task, ttl = updated_row
-            task = self._serialize(wrapped_task["task"])
+            task, ttl = updated_row
+            task = self._serialize(task)
             return task, ttl
 
     def _serialize(self, task: Any) -> str:
