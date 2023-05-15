@@ -130,7 +130,6 @@ class TaskQueue:
         # into problems later when we calculate the actual deadline
         lease_timeout = float(lease_timeout)
 
-        # we wrap the task itself with some meta data
         id_ = str(uuid4())
 
         serialized_task = self._serialize(task)
