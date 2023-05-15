@@ -5,6 +5,7 @@ test = [
 ]
 lint = [
     "flake8>=5.0.4",
+    "black>=23.3.0",
 ]
 mypy = [
     "mypy>=1.2.0",
@@ -15,6 +16,24 @@ log_cli = true
 log_cli_level = "INFO"
 log_cli_format = "%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)"
 log_cli_date_format = "%Y-%m-%d %H:%M:%S"
+
+[tool.black]
+line-length = 79
+include = '\.pyi?$'
+exclude = '''
+    /(
+        \.eggs
+        | \.git
+        | \.hg
+        | \.mypy_cache
+        | \.tox
+        | \.venv
+        | _build
+        | buck-out
+        | build
+        | dist
+    )/
+'''
 
 [project]
 name = "postgres-tq"

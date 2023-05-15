@@ -2,7 +2,7 @@ import json
 import logging
 
 from uuid import uuid4, UUID
-from typing import Optional, Tuple, Iterator, Dict, Any, Callable
+from typing import Tuple, Iterator, Dict, Any, Callable
 
 from psycopg import sql, connect
 
@@ -15,11 +15,10 @@ class TaskQueue:
         self,
         dsn: str,
         queue_name: str,
-        table_name: str = 'task_queue',
+        table_name: str = "task_queue",
         reset: bool = False,
         create_table: bool = False,
-        ttl_zero_callback: Optional[
-            Callable[[UUID, Optional[str]], None]] = None
+        ttl_zero_callback: Callable[[UUID, str | None], None] | None = None,
     ):
         """Initialize the task queue.
 
@@ -74,8 +73,9 @@ class TaskQueue:
         # TODO: check if the table already exist
         # whether it has the same schema
         with self.conn.cursor() as cur:
-            cur.execute(sql.SQL(
-                """CREATE TABLE IF NOT EXISTS  {} (
+            cur.execute(
+                sql.SQL(
+                    """CREATE TABLE IF NOT EXISTS  {} (
                             id UUID PRIMARY KEY,
                             queue_name TEXT NOT NULL,
                             task JSONB NOT NULL,
@@ -86,30 +86,32 @@ class TaskQueue:
                             deadline TIMESTAMP,
                             completed_at TIMESTAMP
                         )"""
-                    ).format(sql.Identifier(self._table_name)))
+                ).format(sql.Identifier(self._table_name))
+            )
 
     def __len__(self) -> int:
         """
         Returns the length of processing or to be processed tasks
         """
         with self.conn.cursor() as cursor:
-            cursor.execute(sql.SQL("""
+            cursor.execute(
+                sql.SQL(
+                    """
                 SELECT count(1) as count
                 FROM {}
                 WHERE queue_name = %s
                     AND completed_at IS NULL
-            """).format(sql.Identifier(self._table_name)),
-                (self._queue_name,))
+            """
+                ).format(sql.Identifier(self._table_name)),
+                (self._queue_name,),
+            )
             row = cursor.fetchone()
             count: int = row[0] if row else 0
             self.conn.commit()
             return count
 
     def add(
-        self,
-        task: Dict[Any, Any],
-        lease_timeout: float,
-        ttl: int = 3
+        self, task: Dict[str, Any], lease_timeout: float, ttl: int = 3
     ) -> None:
         """Add a task to the task queue.
 
@@ -131,13 +133,15 @@ class TaskQueue:
         # we wrap the task itself with some meta data
         id_ = str(uuid4())
         wrapped_task = {
-            'task': task,
+            "task": task,
         }
         serialized_task = self._serialize(wrapped_task)
 
         with self.conn.cursor() as cursor:
             # store the task + metadata and put task-id into the task queue
-            cursor.execute(sql.SQL("""
+            cursor.execute(
+                sql.SQL(
+                    """
                 INSERT INTO {} (
                     id,
                     queue_name,
@@ -146,11 +150,13 @@ class TaskQueue:
                     lease_timeout
                 )
                 VALUES (%s, %s, %s, %s, %s)
-            """).format(sql.Identifier(self._table_name)),
-                (id_, self._queue_name, serialized_task, ttl, lease_timeout))
+            """
+                ).format(sql.Identifier(self._table_name)),
+                (id_, self._queue_name, serialized_task, ttl, lease_timeout),
+            )
             self.conn.commit()
 
-    def get(self) -> Tuple[Optional[Dict[Any, Any]], Optional[UUID]]:
+    def get(self) -> Tuple[Dict[str, Any] | None, UUID | None]:
         """Get a task from the task queue (non-blocking).
 
         This statement marks the next available task in the queue as
@@ -189,8 +195,9 @@ class TaskQueue:
         conn = self.conn
 
         with conn.cursor() as cur:
-
-            cur.execute(sql.SQL("""
+            cur.execute(
+                sql.SQL(
+                    """
                 UPDATE {}
                 SET processing = true,
                     deadline =
@@ -206,23 +213,24 @@ class TaskQueue:
                     FOR UPDATE SKIP LOCKED
                     LIMIT 1
                 )
-                RETURNING id, task;""")
-                        .format(
-                            sql.Identifier(self._table_name),
-                            sql.Identifier(self._table_name)
-                        ),
-                        (self._queue_name,),)
+                RETURNING id, task;"""
+                ).format(
+                    sql.Identifier(self._table_name),
+                    sql.Identifier(self._table_name),
+                ),
+                (self._queue_name,),
+            )
 
             row = cur.fetchone()
             if row is None:
                 return None, None
             task_id, wrapped_task = row
-            task = wrapped_task['task']
-            logger.info(f'Got task with id {task_id}')
+            task = wrapped_task["task"]
+            logger.info(f"Got task with id {task_id}")
             conn.commit()
             return task, task_id
 
-    def complete(self, task_id: UUID) -> None:
+    def complete(self, task_id: UUID | None) -> None:
         """Mark a task as completed.
 
         Marks a task as completed by setting completed_at column by
@@ -234,21 +242,23 @@ class TaskQueue:
 
         Parameters
         ----------
-        task_id : str
+        task_id : UUID | None
             the task ID
 
         """
-        logger.info(f'Marking task {task_id} as completed')
+        logger.info(f"Marking task {task_id} as completed")
         conn = self.conn
         with conn.cursor() as cur:
-
-            cur.execute(sql.SQL("""
+            cur.execute(
+                sql.SQL(
+                    """
                 UPDATE {}
                 SET completed_at = NOW(),
                     processing = false
-                WHERE id = %s""")
-                        .format(sql.Identifier(self._table_name)),
-                        (task_id,),)
+                WHERE id = %s"""
+                ).format(sql.Identifier(self._table_name)),
+                (task_id,),
+            )
             conn.commit()
 
     def is_empty(self) -> bool:
@@ -283,7 +293,9 @@ class TaskQueue:
         # goes through all the tasks that are marked as processing
         # and check the ones with expired timeout
         with self.conn.cursor() as cur:
-            cur.execute(sql.SQL("""
+            cur.execute(
+                sql.SQL(
+                    """
                 SELECT id
                 FROM {}
                 WHERE completed_at IS NULL
@@ -291,8 +303,10 @@ class TaskQueue:
                     AND queue_name = %s
                     AND deadline < NOW()
                 ORDER BY created_at;
-            """).format(sql.Identifier(self._table_name)),
-                        (self._queue_name,))
+            """
+                ).format(sql.Identifier(self._table_name)),
+                (self._queue_name,),
+            )
             expired_tasks = cur.fetchall()
             self.conn.commit()
             logger.debug(f"Expired tasks {expired_tasks}")
@@ -307,13 +321,17 @@ class TaskQueue:
                 # to get that task from the queue, it has been completed
                 # and therefore deleted from the queue. In this case
                 # tasks is None and we can continue
-                logger.info(f"Task {task_id} was marked completed while we "
-                            "checked for expired leases, nothing to do.")
+                logger.info(
+                    f"Task {task_id} was marked completed while we "
+                    "checked for expired leases, nothing to do."
+                )
                 continue
 
             if ttl <= 0:
-                logger.error(f'Job {task} with id {task_id} '
-                             'failed too many times, marking it as completed.')
+                logger.error(
+                    f"Job {task} with id {task_id} "
+                    "failed too many times, marking it as completed."
+                )
                 # # here committing to release the previous update lock
                 self.conn.commit()
                 self.complete(task_id)
@@ -323,9 +341,8 @@ class TaskQueue:
             self.conn.commit()
 
     def get_updated_expired_task(
-        self,
-        task_id: UUID
-    ) -> Tuple[Optional[str], Optional[int]]:
+        self, task_id: UUID
+    ) -> Tuple[str | None, int | None]:
         """
         Given the id of an expired task, it tries to reschedule the
         task by marking it as not processing, resetting the deadline
@@ -340,7 +357,9 @@ class TaskQueue:
 
         """
         with self.conn.cursor() as cur:
-            cur.execute(sql.SQL("""
+            cur.execute(
+                sql.SQL(
+                    """
                 UPDATE {}
                 SET ttl = ttl - 1,
                     processing = false,
@@ -356,18 +375,23 @@ class TaskQueue:
                     LIMIT 1
                 )
                 RETURNING task, ttl;
-            """).format(
-                            sql.Identifier(self._table_name),
-                            sql.Identifier(self._table_name)
-                        ),
-                        (self._queue_name, task_id,))
+            """
+                ).format(
+                    sql.Identifier(self._table_name),
+                    sql.Identifier(self._table_name),
+                ),
+                (
+                    self._queue_name,
+                    task_id,
+                ),
+            )
             updated_row = cur.fetchone()
 
             if updated_row is None:
                 return None, None
 
             wrapped_task, ttl = updated_row
-            task = self._serialize(wrapped_task['task'])
+            task = self._serialize(wrapped_task["task"])
             return task, ttl
 
     def _serialize(self, task: Any) -> str:
@@ -376,7 +400,7 @@ class TaskQueue:
     def _deserialize(self, blob: str) -> Any:
         return json.loads(blob)
 
-    def reschedule(self, task_id: UUID) -> None:
+    def reschedule(self, task_id: UUID | None) -> None:
         """Move a task back from the processing- to the task queue.
 
         Workers can use this method to "drop" a work unit in case of
@@ -398,11 +422,12 @@ class TaskQueue:
 
         if not isinstance(task_id, UUID):
             raise ValueError("task_id must be a UUID")
-        logger.info(f'Rescheduling task {task_id}..')
+        logger.info(f"Rescheduling task {task_id}..")
         conn = self.conn
         with conn.cursor() as cur:
-
-            cur.execute(sql.SQL("""
+            cur.execute(
+                sql.SQL(
+                    """
                 UPDATE {}
                 SET processing = false,
                     deadline = NULL
@@ -413,32 +438,34 @@ class TaskQueue:
                         AND id = %s
                     FOR UPDATE SKIP LOCKED
                 )
-                RETURNING id;""").format(
-                            sql.Identifier(self._table_name),
-                            sql.Identifier(self._table_name)
-                        ), (task_id,),)
+                RETURNING id;"""
+                ).format(
+                    sql.Identifier(self._table_name),
+                    sql.Identifier(self._table_name),
+                ),
+                (task_id,),
+            )
 
             found = cur.fetchone()
             conn.commit()
             if found is None:
-                raise ValueError(f'Task {task_id} does not exist.')
+                raise ValueError(f"Task {task_id} does not exist.")
 
     def _reset(self) -> None:
-        """Delete all tasks in the DB with our queue name.
-
-        """
+        """Delete all tasks in the DB with our queue name."""
         with self.conn.cursor() as cursor:
             cursor.execute(
-                sql.SQL(
-                    "DELETE FROM {} WHERE queue_name = %s "
-                ).format(sql.Identifier(self._table_name)),
-                (self._queue_name,),)
+                sql.SQL("DELETE FROM {} WHERE queue_name = %s ").format(
+                    sql.Identifier(self._table_name)
+                ),
+                (self._queue_name,),
+            )
 
             self.conn.commit()
 
-    def __iter__(self) -> Iterator[
-        Tuple[Optional[Dict[Any, Any]], Optional[UUID]]
-            ]:
+    def __iter__(
+        self,
+    ) -> Iterator[Tuple[Dict[str, Any] | None, UUID | None]]:
         """Iterate over tasks and mark them as complete.
 
         This allows to easily iterate over the tasks to process them:
@@ -465,7 +492,7 @@ class TaskQueue:
                 self.complete(id_)
             if self.is_empty():
                 logger.debug(
-                    f'{self._queue_name} is empty. '
-                    'Nothing to process anymore...'
+                    f"{self._queue_name} is empty. "
+                    "Nothing to process anymore..."
                 )
                 break
