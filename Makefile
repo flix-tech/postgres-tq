@@ -33,22 +33,18 @@ rm-postgres:
 .PHONY: install
 install:
 	pdm install
-	@. $(BIN)/activate
 
 .PHONY: test
 test:
 	pdm install --dev
-	@. $(BIN)/activate && \
 	python -m pytest
 
 .PHONY: lint
 lint:
 	pdm install --dev
-	@. $(BIN)/activate && \
 	python -m flake8 postgrestq
 
 .PHONY: mypy
 mypy:
 	pdm install --dev
-	@. $(BIN)/activate && \
 	python -m mypy --strict --explicit-package-bases postgrestq

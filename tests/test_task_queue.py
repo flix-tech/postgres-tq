@@ -2,15 +2,17 @@ import logging
 import time
 import os
 from unittest import mock
+from uuid import UUID
 
 import pytest
+from _pytest.logging import LogCaptureFixture
+from _pytest.monkeypatch import MonkeyPatch
 
 from postgrestq import TaskQueue
 
 
 POSTGRES_DSN = os.environ.get(
-    'POSTGRES_DSN',
-    'postgresql://postgres:password@localhost:15432/postgres'
+    "POSTGRES_DSN", "postgresql://postgres:password@localhost:15432/postgres"
 )  # noqa
 LEASE_TIMEOUT = 0.1
 
@@ -18,16 +20,10 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.fixture
-def taskqueue():
+def task_queue():
+    queue_name = "test_queue"
 
-    queue_name = 'test_queue'
-
-    tq = TaskQueue(
-        POSTGRES_DSN,
-        queue_name,
-        reset=True,
-        create_table=True
-    )
+    tq = TaskQueue(POSTGRES_DSN, queue_name, reset=True, create_table=True)
 
     yield tq
 
@@ -35,264 +31,268 @@ def taskqueue():
     tq._reset()
 
 
-def test_add(taskqueue):
+def test_add(task_queue: TaskQueue):
     # add two tasks and get them back in correct order
-    TASKS = ['foo', 'bar']
+    TASKS = [{"foo": 1}, {"bar": 2}]
     for task in TASKS:
-        taskqueue.add(task, LEASE_TIMEOUT)
+        task_queue.add(task, LEASE_TIMEOUT)
 
-    task, _ = taskqueue.get()
+    task, _ = task_queue.get()
     assert task == TASKS[0]
-    task, _ = taskqueue.get()
+    task, _ = task_queue.get()
     assert task == TASKS[1]
 
 
-def test_get(taskqueue):
-    TASK = 'foo'
-    taskqueue.add(TASK, LEASE_TIMEOUT)
-    task, _ = taskqueue.get()
+def test_get(task_queue: TaskQueue):
+    TASK = {"foo": 1}
+    task_queue.add(TASK, LEASE_TIMEOUT)
+    task, _ = task_queue.get()
     assert task == TASK
     # calling on empty queue returns None
-    assert taskqueue.get() == (None, None)
+    assert task_queue.get() == (None, None)
 
 
-def test_is_empty(taskqueue):
-    assert taskqueue.is_empty()
+def test_is_empty(task_queue: TaskQueue):
+    assert task_queue.is_empty()
 
-    taskqueue.add('foo', LEASE_TIMEOUT)
-    assert not taskqueue.is_empty()
+    task_queue.add({"foo": 1}, LEASE_TIMEOUT)
+    assert not task_queue.is_empty()
 
-    task, id_ = taskqueue.get()
-    assert not taskqueue.is_empty()
+    task, id_ = task_queue.get()
+    assert not task_queue.is_empty()
 
-    taskqueue.complete(id_)
-    assert taskqueue.is_empty()
+    task_queue.complete(id_)
+    assert task_queue.is_empty()
 
 
-def test_complete(taskqueue):
+def test_complete(task_queue: TaskQueue):
     # boring case
-    taskqueue.add('foo', LEASE_TIMEOUT, ttl=1)
-    _, id_ = taskqueue.get()
-    assert not taskqueue.is_empty()
-    taskqueue.complete(id_)
-    assert taskqueue.is_empty()
+    task_queue.add({"foo": 1}, LEASE_TIMEOUT, ttl=1)
+    _, id_ = task_queue.get()
+    assert not task_queue.is_empty()
+    task_queue.complete(id_)
+    assert task_queue.is_empty()
 
     # interesting case: we complete the task after it expired already
-    taskqueue.add('foo', LEASE_TIMEOUT, ttl=1)
-    _, id_ = taskqueue.get()
+    task_queue.add({"foo": 1}, LEASE_TIMEOUT, ttl=1)
+    _, id_ = task_queue.get()
     time.sleep(LEASE_TIMEOUT + 0.1)
-    assert taskqueue.is_empty()
-    taskqueue.complete(id_)
-    assert taskqueue.is_empty()
+    assert task_queue.is_empty()
+    task_queue.complete(id_)
+    assert task_queue.is_empty()
 
 
-def test_expired(taskqueue):
-    taskqueue.add('foo', LEASE_TIMEOUT, ttl=1)
-    taskqueue.get()
-    assert not taskqueue.is_empty()
+def test_expired(task_queue: TaskQueue):
+    task_queue.add({"foo": 1}, LEASE_TIMEOUT, ttl=1)
+    task_queue.get()
+    assert not task_queue.is_empty()
     time.sleep(LEASE_TIMEOUT + 0.1)
-    assert taskqueue.is_empty()
+    assert task_queue.is_empty()
 
     for i in range(5):
-        taskqueue.add(i, LEASE_TIMEOUT)
+        task_queue.add({str(i): i**2}, LEASE_TIMEOUT)
 
     tstart = time.time()
-    while not taskqueue.is_empty():
-        taskqueue.get()
+    while not task_queue.is_empty():
+        task_queue.get()
     tend = time.time()
     assert tend - tstart > LEASE_TIMEOUT
 
 
-def test_ttl(taskqueue, caplog):
-    taskqueue.add('foo', LEASE_TIMEOUT, ttl=3)
+def test_ttl(task_queue: TaskQueue, caplog: LogCaptureFixture):
+    task_queue.add({"foo": 1}, LEASE_TIMEOUT, ttl=3)
 
     # start a task and let it expire...
-    taskqueue.get()
+    task_queue.get()
     time.sleep(LEASE_TIMEOUT + 0.1)
     # check and put it back into task queue
-    assert not taskqueue.is_empty()
+    assert not task_queue.is_empty()
 
     # second attempt...
-    taskqueue.get()
+    task_queue.get()
     time.sleep(LEASE_TIMEOUT + 0.1)
-    assert not taskqueue.is_empty()
+    assert not task_queue.is_empty()
 
     # third attempt... *boom*
-    taskqueue.get()
+    task_queue.get()
     time.sleep(LEASE_TIMEOUT + 0.1)
     caplog.clear()
-    assert taskqueue.is_empty()
+    assert task_queue.is_empty()
     assert "failed too many times" in caplog.text
 
 
-def test_callback(taskqueue):
-
+def test_callback(task_queue: TaskQueue):
     mock_cb = mock.Mock()
-    taskqueue.ttl_zero_callback = mock_cb
+    task_queue.ttl_zero_callback = mock_cb
 
-    taskqueue.add('foo', LEASE_TIMEOUT, ttl=3)
+    task_queue.add({"foo": 1}, LEASE_TIMEOUT, ttl=3)
 
     # start a task and let it expire...
-    taskqueue.get()
+    task_queue.get()
     time.sleep(LEASE_TIMEOUT + 0.1)
     # check and put it back into task queue
-    assert not taskqueue.is_empty()
+    assert not task_queue.is_empty()
     assert not mock_cb.called
 
     # second attempt...
-    taskqueue.get()
+    task_queue.get()
     time.sleep(LEASE_TIMEOUT + 0.1)
-    assert not taskqueue.is_empty()
+    assert not task_queue.is_empty()
     assert not mock_cb.called
 
     # third attempt... *boom*
-    taskqueue.get()
+    task_queue.get()
     time.sleep(LEASE_TIMEOUT + 0.1)
-    assert taskqueue.is_empty()
+    assert task_queue.is_empty()
     assert mock_cb.called
 
 
-def test_reschedule(taskqueue):
-    taskqueue.add('foo', LEASE_TIMEOUT)
-    _, id_ = taskqueue.get()
+def test_reschedule(task_queue: TaskQueue):
+    task_queue.add({"foo": 1}, LEASE_TIMEOUT)
+    _, id_ = task_queue.get()
     # task queue should be empty as 'foo' is in the processing queue
-    assert taskqueue.get() == (None, None)
+    assert task_queue.get() == (None, None)
 
-    taskqueue.reschedule(id_)
-    task, _ = taskqueue.get()
-    assert task == 'foo'
+    task_queue.reschedule(id_)
+    task, _ = task_queue.get()
+    assert task == {"foo": 1}
 
 
-def test_reschedule_error(taskqueue):
+def test_reschedule_error(task_queue: TaskQueue):
     with pytest.raises(ValueError):
-        taskqueue.reschedule('bar')
+        task_queue.reschedule("bar")
 
 
-def test_full(taskqueue):
-    TASKS = ['FOO', 'BAR', 'BAZ']
+def test_full(task_queue: TaskQueue):
+    TASKS = [
+        {"FOO": 1, "f": "something"},
+        {"BAR": 2, "b": "something else"},
+        {"BAZ": 3, "c": "another thing"},
+    ]
     for t in TASKS:
-        taskqueue.add(t, LEASE_TIMEOUT)
+        task_queue.add(t, LEASE_TIMEOUT)
 
     counter = 0
     while True:
-        task, task_id = taskqueue.get()
+        task, task_id = task_queue.get()
         if task is not None:
-            taskqueue.complete(task_id)
+            task_queue.complete(task_id)
             counter += 1
-        if taskqueue.is_empty():
+        if task_queue.is_empty():
             break
 
     assert counter == len(TASKS)
 
 
-def test_complete_rescheduled_task(taskqueue):
-    TASK_CONTENT = 'sloth'
-    taskqueue.add(TASK_CONTENT, LEASE_TIMEOUT, ttl=3)
+def test_complete_rescheduled_task(task_queue: TaskQueue):
+    TASK_CONTENT = {"sloth": 1}
+    task_queue.add(TASK_CONTENT, LEASE_TIMEOUT, ttl=3)
 
     # start a task and let it expire...
-    _, task_id = taskqueue.get()
+    _, task_id = task_queue.get()
     time.sleep(LEASE_TIMEOUT + 0.1)
 
     # check and put it back into task queue
-    assert not taskqueue.is_empty()
+    assert not task_queue.is_empty()
 
     # now the task is completed, although it took a long time...
-    taskqueue.complete(task_id)
+    task_queue.complete(task_id)
 
-    # it is NOT in the taskqueue, because it was finished
-    assert taskqueue.is_empty()
+    # it is NOT in the task_queue, because it was finished
+    assert task_queue.is_empty()
 
 
 #
-def test_tolerate_double_completion(taskqueue):
-    TASK_CONTENT = 'sloth'
-    taskqueue.add(TASK_CONTENT, LEASE_TIMEOUT, ttl=3)
+def test_tolerate_double_completion(task_queue: TaskQueue):
+    TASK_CONTENT = {"sloth": 1}
+    task_queue.add(TASK_CONTENT, LEASE_TIMEOUT, ttl=3)
 
     # start a task and let it expire...
-    task, task_id = taskqueue.get()
+    task, task_id = task_queue.get()
     time.sleep(LEASE_TIMEOUT + 0.1)
 
     # check and put it back into task queue
-    assert not taskqueue.is_empty()
+    assert not task_queue.is_empty()
 
     # get it again
-    _, task_redo_id = taskqueue.get()
+    _, task_redo_id = task_queue.get()
     assert task_redo_id == task_id
 
     # now the task is completed, although it took a long time...
-    taskqueue.complete(task_id)
+    task_queue.complete(task_id)
 
     # but the other worker doesn't know and keep processing, until...
-    taskqueue.complete(task_redo_id)
+    task_queue.complete(task_redo_id)
 
     # no crashes, the double completion is fine and queues are empty
-    assert taskqueue.is_empty()
+    assert task_queue.is_empty()
 
 
-def test_task_queue_len(taskqueue):
-
+def test_task_queue_len(task_queue: TaskQueue):
     # empty queue
-    assert len(taskqueue) == 0
+    assert len(task_queue) == 0
 
     # insert two tasks
-    TASKS = ['foo', 'bar']
+    TASKS = [{"foo": 1}, {"bar": 2}]
     for task in TASKS:
-        taskqueue.add(task, LEASE_TIMEOUT)
-    assert len(taskqueue) == len(TASKS)
+        task_queue.add(task, LEASE_TIMEOUT)
+    assert len(task_queue) == len(TASKS)
 
     # removing getting the tasks w/o completing them
     ids = []
     for task in TASKS:
-        ids.append(taskqueue.get()[1])
-    assert len(taskqueue) == len(TASKS)
+        ids.append(task_queue.get()[1])
+    assert len(task_queue) == len(TASKS)
 
     for id_ in ids:
-        taskqueue.complete(id_)
-    assert len(taskqueue) == 0
+        task_queue.complete(id_)
+    assert len(task_queue) == 0
 
 
-def test_iterator(taskqueue):
-    taskqueue.add('bla', LEASE_TIMEOUT, ttl=3)
-    taskqueue.add('blip', LEASE_TIMEOUT, ttl=3)
+def test_iterator(task_queue: TaskQueue):
+    task_queue.add({"bla": "bla"}, LEASE_TIMEOUT, ttl=3)
+    task_queue.add({"blip": "blop"}, LEASE_TIMEOUT, ttl=3)
 
     found_tasks = []
-    for task, id in taskqueue:
+    for task, id in task_queue:
         found_tasks.append(task)
-    assert found_tasks == ['bla', 'blip']
+    assert found_tasks == [{"bla": "bla"}, {"blip": "blop"}]
 
 
-def test_expired_leases_race(taskqueue, monkeypatch, caplog):
+def test_expired_leases_race(
+    task_queue: TaskQueue, monkeypatch: MonkeyPatch, caplog: LogCaptureFixture
+):
     # save the original function so we can use it inside the mock
-    get_orig = taskqueue.get_updated_expired_task
+    get_orig = task_queue.get_updated_expired_task
 
     # simulate a race condition in _check_expired_leases where we can
     # still see a task in the set of tasks but by the time we try to get
     # it from the queue it has been completed, i.e. is None
-    def mock_get(task_id):
+    def mock_get(task_id: UUID):
         # marks the task as complete before trying to update the task
         # before trying to update the task
-        taskqueue.complete(task_id)
+        task_queue.complete(task_id)
         return get_orig(task_id)
 
-    taskqueue.add('foo', LEASE_TIMEOUT)
+    task_queue.add({"foo": 1}, LEASE_TIMEOUT)
 
     # move task to processing queue
-    taskqueue.get()
+    task_queue.get()
     time.sleep(LEASE_TIMEOUT + 0.1)
 
-    monkeypatch.setattr(taskqueue, 'get_updated_expired_task', mock_get)
+    monkeypatch.setattr(task_queue, "get_updated_expired_task", mock_get)
     caplog.set_level(logging.INFO)
-    taskqueue._check_expired_leases()
+    task_queue._check_expired_leases()
     assert "marked completed while we checked for" in caplog.text
 
 
-def test_lease_timeout_is_none(taskqueue):
+def test_lease_timeout_is_none(task_queue: TaskQueue):
     with pytest.raises(TypeError):
-        taskqueue.add('bla', lease_timeout=None)
+        task_queue.add({"bla": "bla", "blip": "blop"}, lease_timeout=None)
 
 
-def test_lease_timeout_is_not_float_or_int(taskqueue):
+def test_lease_timeout_is_not_float_or_int(task_queue: TaskQueue):
     # funny thing, a boolean can be converted to float (i.e. 0.0 and
     # 1.0) without causing an error. so be it
     with pytest.raises(ValueError):
-        taskqueue.add('bla', lease_timeout="foo")
+        task_queue.add({"bla": "bla", "blip": "blop"}, lease_timeout="foo")

@@ -1,4 +1,8 @@
-# Postgres Task queue
+[![postgres-tq Actions Status](https://github.com/flix-tech/postgres-tq/workflows/CI/CD%20Pipeline/badge.svg?branch=main)](https://github.com/flix-tech/postgres-tq/actions)
+[![License](https://img.shields.io/github/license/flix-tech/postgres-tq)](https://pypi.org/project/postgres-tq/)
+[![PyPI - Python Version](https://img.shields.io/pypi/v/postgres-tq)](https://pypi.org/project/postgres-tq/)
+
+# Postgres Task Queue
 
 This repo will contain the [Postgres](https://www.postgresql.org/) based task queue logic, similar to [our redis-tq](https://github.com/flix-tech/redis-tq) but based on postgres instead.
 
@@ -23,6 +27,16 @@ CREATE TABLE task_queue (
     completed_at TIMESTAMP
 )
 ```
+
+## Installation
+
+postgres-tq is available on [PyPI][] so you can simply install via:
+
+```bash
+$ pip install postgres-tq
+```
+
+[PyPI]: https://pypi.org/project/postgres-tq/
 
 ## How it works
 
@@ -104,7 +118,7 @@ from postgrestq import TaskQueue
 task_queue = TaskQueue(POSTGRES_CONN_STR, queue_name, reset=True)
 
 for task, id_ in taskqueue:
-    # do something with task and it automatically
+    # do something with task and it's automatically
     # marked as completed by the iterator at the end
     # of the iteration
 
@@ -116,17 +130,17 @@ If the consumer crashes (i.e. the task is not marked as completed after lease_ti
 
 The tests will check a presence of an Postgres DB in the port 15432. To initiate one using docker you can run:
 
-```
-make run-postgres
+```bash
+$ make run-postgres
 ```
 
 Then run
 
-```
-make test
+```bash
+$ pdm run make test
 ```
 
-Make sure you have `pdm` and `Docker` installed for this to work.
+`pdm run` will ensure that the `make test` command is executed within the context of the virtual environment managed by `pdm`. Make sure you have `pdm` and `Docker` installed for this to work.
 
 ## License
 

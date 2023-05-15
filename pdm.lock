@@ -145,6 +145,7 @@ summary = "Provider of IANA time zone data"
 
 [metadata]
 lock_version = "4.2"
+cross_platform = true
 groups = ["default", "lint", "mypy", "test"]
 content_hash = "sha256:8fa38b77ea81104509b5f69a90868426381685cdbc646ed51d35a6dddf15fff8"
 
