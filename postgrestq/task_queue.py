@@ -2,7 +2,7 @@ import json
 import logging
 
 from uuid import uuid4, UUID
-from typing import Tuple, Iterator, Dict, Any, Callable
+from typing import Optional, Tuple, Iterator, Dict, Any, Callable
 
 from psycopg import sql, connect
 
@@ -18,7 +18,9 @@ class TaskQueue:
         table_name: str = "task_queue",
         reset: bool = False,
         create_table: bool = False,
-        ttl_zero_callback: Callable[[UUID, str | None], None] | None = None,
+        ttl_zero_callback: Optional[
+            Callable[[UUID, Optional[str]], None]
+        ] = None,
     ):
         """Initialize the task queue.
 
@@ -153,7 +155,7 @@ class TaskQueue:
             )
             self.conn.commit()
 
-    def get(self) -> Tuple[Dict[str, Any] | None, UUID | None]:
+    def get(self) -> Tuple[Optional[Dict[str, Any]], Optional[UUID]]:
         """Get a task from the task queue (non-blocking).
 
         This statement marks the next available task in the queue as
@@ -226,7 +228,7 @@ class TaskQueue:
             conn.commit()
             return task, task_id
 
-    def complete(self, task_id: UUID | None) -> None:
+    def complete(self, task_id: Optional[UUID]) -> None:
         """Mark a task as completed.
 
         Marks a task as completed by setting completed_at column by
@@ -338,7 +340,7 @@ class TaskQueue:
 
     def get_updated_expired_task(
         self, task_id: UUID
-    ) -> Tuple[str | None, int | None]:
+    ) -> Tuple[Optional[str], Optional[int]]:
         """
         Given the id of an expired task, it tries to reschedule the
         task by marking it as not processing, resetting the deadline
@@ -396,7 +398,7 @@ class TaskQueue:
     def _deserialize(self, blob: str) -> Any:
         return json.loads(blob)
 
-    def reschedule(self, task_id: UUID | None) -> None:
+    def reschedule(self, task_id: Optional[UUID]) -> None:
         """Move a task back from the processing- to the task queue.
 
         Workers can use this method to "drop" a work unit in case of
@@ -461,7 +463,7 @@ class TaskQueue:
 
     def __iter__(
         self,
-    ) -> Iterator[Tuple[Dict[str, Any] | None, UUID | None]]:
+    ) -> Iterator[Tuple[Optional[Dict[str, Any]], Optional[UUID]]]:
         """Iterate over tasks and mark them as complete.
 
         This allows to easily iterate over the tasks to process them:
