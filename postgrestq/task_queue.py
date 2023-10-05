@@ -473,7 +473,7 @@ class TaskQueue:
         # Make sure the pruning time is an actual number
         before = int(before)
         logger.info(f"Pruning all tasks completed more than "
-                    f"{before} seconds(s) ago.")
+                    f"{before} second(s) ago.")
 
         with self.conn.cursor() as cursor:
             cursor.execute(
