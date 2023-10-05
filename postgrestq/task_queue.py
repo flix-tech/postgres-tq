@@ -202,7 +202,8 @@ class TaskQueue:
                 UPDATE {}
                 SET processing = true,
                     deadline =
-                        current_timestamp + CAST(lease_timeout || ' seconds' AS INTERVAL)
+                        current_timestamp +
+                        CAST(lease_timeout || ' seconds' AS INTERVAL)
                 WHERE id = (
                     SELECT id
                     FROM {}
