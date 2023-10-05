@@ -479,9 +479,9 @@ class TaskQueue:
             cursor.execute(
                 sql.SQL(
                     """
-                    DELETE FROM {} 
-                    WHERE queue_name = %s 
-                        AND completed_at IS NOT NULL 
+                    DELETE FROM {}
+                    WHERE queue_name = %s
+                        AND completed_at IS NOT NULL
                         AND processing = false
                         AND completed_at < NOW() - CAST(
                             %s || ' seconds' AS INTERVAL);
