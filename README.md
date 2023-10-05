@@ -137,10 +137,10 @@ from postgrestq import TaskQueue
 # If reset=True, the full queue content will be deleted
 task_queue = TaskQueue(POSTGRES_CONN_STR, queue_name, reset=False)
 
-# Prune all tasks from queue completed more than 3 hours ago,
-# tasks in progress, not started and completed recently will 
+# Prune all tasks from queue completed more than 1 hour (in seconds)
+# ago, tasks in progress, not started and completed recently will 
 # stay in the postgres task_queue table
-task_queue.prune_completed_tasks(3)
+task_queue.prune_completed_tasks(3600)
 
 ```
 

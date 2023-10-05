@@ -462,18 +462,18 @@ class TaskQueue:
             self.conn.commit()
 
     def prune_completed_tasks(self, before: int) -> None:
-        """Delete all completed tasks older than the given number of hours.
+        """Delete all completed tasks older than the given number of seconds.
 
         Parameters
         ----------
         before : int
-            Hours in the past from which completed task will be deleted
+            Seconds in the past from which completed task will be deleted
 
         """
         # Make sure the pruning time is an actual number
         before = int(before)
         logger.info(f"Pruning all tasks completed more than "
-                    f"{before} hour(s) ago.")
+                    f"{before} seconds(s) ago.")
 
         with self.conn.cursor() as cursor:
             cursor.execute(
@@ -484,7 +484,7 @@ class TaskQueue:
                         AND completed_at IS NOT NULL 
                         AND processing = false
                         AND completed_at < NOW() - CAST(
-                            %s || ' hours' AS INTERVAL);
+                            %s || ' seconds' AS INTERVAL);
                     """
                 ).format(sql.Identifier(self._table_name)),
                 (self._queue_name, before),
