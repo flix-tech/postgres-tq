@@ -20,7 +20,7 @@ CREATE TABLE task_queue (
     queue_name TEXT NOT NULL,
     task JSONB NOT NULL,
     ttl INT NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     processing BOOLEAN NOT NULL DEFAULT false,
     lease_timeout FLOAT,
     deadline TIMESTAMP,
@@ -46,7 +46,7 @@ It uses row level locks of postgres to mimic the atomic pop and atomic push of r
 UPDATE task_queue
 SET processing = true,
     deadline =
-        NOW() + CAST(lease_timeout || ' seconds' AS INTERVAL)
+        current_timestamp + CAST(lease_timeout || ' seconds' AS INTERVAL)
 WHERE id = (
     SELECT id
     FROM task_queue
@@ -128,7 +128,7 @@ If the consumer crashes (i.e. the task is not marked as completed after lease_ti
 
 As the tasks are completed, they will remain in the `task_queue`
 postgres table. The table will be deleted of its content if
-initializing a `TaskQueue` instance with the `reset` flag to `true` 
+initializing a `TaskQueue` instance with the `reset` flag to `true`
 or if using the `prune_completed_tasks` method:
 
 ```py
@@ -138,7 +138,7 @@ from postgrestq import TaskQueue
 task_queue = TaskQueue(POSTGRES_CONN_STR, queue_name, reset=False)
 
 # Prune all tasks from queue completed more than 1 hour (in seconds)
-# ago. Tasks in progress, not started and completed recently will 
+# ago. Tasks in progress, not started and completed recently will
 # stay in the postgres task_queue table
 task_queue.prune_completed_tasks(3600)
 

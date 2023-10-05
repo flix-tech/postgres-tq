@@ -77,13 +77,15 @@ class TaskQueue:
         with self.conn.cursor() as cur:
             cur.execute(
                 sql.SQL(
-                    """CREATE TABLE IF NOT EXISTS  {} (
+                    """CREATE TABLE IF NOT EXISTS {} (
                             id UUID PRIMARY KEY,
                             queue_name TEXT NOT NULL,
                             task JSONB NOT NULL,
                             ttl INT NOT NULL,
-                            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-                            processing BOOLEAN NOT NULL DEFAULT false,
+                            created_at TIMESTAMP NOT NULL
+                                DEFAULT CURRENT_TIMESTAMP,
+                            processing BOOLEAN NOT NULL
+                                DEFAULT false,
                             lease_timeout FLOAT,
                             deadline TIMESTAMP,
                             completed_at TIMESTAMP
@@ -200,7 +202,7 @@ class TaskQueue:
                 UPDATE {}
                 SET processing = true,
                     deadline =
-                        NOW() + CAST(lease_timeout || ' seconds' AS INTERVAL)
+                        current_timestamp + CAST(lease_timeout || ' seconds' AS INTERVAL)
                 WHERE id = (
                     SELECT id
                     FROM {}
@@ -251,7 +253,7 @@ class TaskQueue:
                 sql.SQL(
                     """
                 UPDATE {}
-                SET completed_at = NOW(),
+                SET completed_at = current_timestamp,
                     processing = false
                 WHERE id = %s"""
                 ).format(sql.Identifier(self._table_name)),
@@ -483,7 +485,7 @@ class TaskQueue:
                     WHERE queue_name = %s
                         AND completed_at IS NOT NULL
                         AND processing = false
-                        AND completed_at < NOW() - CAST(
+                        AND completed_at < current_timestamp - CAST(
                             %s || ' seconds' AS INTERVAL);
                     """
                 ).format(sql.Identifier(self._table_name)),
