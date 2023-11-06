@@ -1,13 +1,13 @@
 [tool.pdm]
 [tool.pdm.dev-dependencies]
 test = [
-    "pytest>=7.3.1",
+    "pytest>=7.4.3",
 ]
 lint = [
-    "flake8>=5.0.4",
+    "flake8>=6.1.0",
 ]
 mypy = [
-    "mypy>=1.2.0",
+    "mypy>=1.6.1",
 ]
 
 [tool.pytest.ini_options]
@@ -24,9 +24,9 @@ authors = [
     {name = "FlixTech", email = "open-source@flixbus.com"},
 ]
 dependencies = [
-    "psycopg[binary]>=3.1.8",
+    "psycopg[binary]>=3.1.12",
 ]
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 readme = "README.md"
 license = {text = "MIT"}
 
