@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.5 - 2023-11-06
+
+* Upgraded dependencies, now this library requires Python 3.9 (previously was 3.8)
+
+
 ## 0.0.4 - 2023-11-06
 
 * change name of `check_expired_leases()` to make it a public method
