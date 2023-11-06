@@ -274,20 +274,21 @@ class TaskQueue:
         bool
 
         """
-        self._check_expired_leases()
+        self.check_expired_leases()
         return len(self) == 0
 
-    def _check_expired_leases(self) -> None:
-        """Check for expired leases.
+    def check_expired_leases(self) -> None:
+        """Check for expired leases and put the task back if needed.
 
         This method goes through all tasks that are currently processed
         and checks if their deadline expired. If not we assume the
         worker died. We decrease the TTL and if TTL is still > 0 we
         reschedule the task into the task queue or, if the TTL is
         exhausted, we mark the task as completed by setting
-        `completed_at` column with current timestamp.
+        `completed_at` column with current timestamp and call the
+        expired task callback if it's set.
 
-        Note: lease check is only performed against the tasks in
+        Note: lease check is only performed against the tasks
         that are processing.
 
         """

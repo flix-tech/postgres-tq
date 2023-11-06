@@ -265,7 +265,7 @@ def test_expired_leases_race(
     # save the original function so we can use it inside the mock
     get_orig = task_queue.get_updated_expired_task
 
-    # simulate a race condition in _check_expired_leases where we can
+    # simulate a race condition in check_expired_leases where we can
     # still see a task in the set of tasks but by the time we try to get
     # it from the queue it has been completed, i.e. is None
     def mock_get(task_id: UUID):
@@ -282,7 +282,7 @@ def test_expired_leases_race(
 
     monkeypatch.setattr(task_queue, "get_updated_expired_task", mock_get)
     caplog.set_level(logging.INFO)
-    task_queue._check_expired_leases()
+    task_queue.check_expired_leases()
     assert "marked completed while we checked for" in caplog.text
 
 

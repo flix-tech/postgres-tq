@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.4 - 2023-11-06
+
+* change name of `check_expired_leases()` to make it a public method
+
 ## 0.0.3 - 2023-10-05
 
 * add function to delete old completed tasks
