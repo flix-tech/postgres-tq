@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+* adding a task now returns its UUID, previously nothign was returned
+
 ## 0.0.5 - 2023-11-06
 
 * Upgraded dependencies, now this library requires Python 3.9 (previously was 3.8)

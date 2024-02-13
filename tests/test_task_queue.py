@@ -34,9 +34,11 @@ def task_queue():
 def test_add(task_queue: TaskQueue):
     # add two tasks and get them back in correct order
     TASKS = [{"foo": 1}, {"bar": 2}]
+    task_ids = set()
     for task in TASKS:
-        task_queue.add(task, LEASE_TIMEOUT)
-
+        tid = task_queue.add(task, LEASE_TIMEOUT)
+        task_ids.add(tid)
+    assert len(task_ids) == 2
     task, _ = task_queue.get()
     assert task == TASKS[0]
     task, _ = task_queue.get()
