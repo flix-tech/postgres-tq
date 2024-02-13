@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.0.6 - 2024-02-13
 
 * adding a task now returns its UUID, previously nothign was returned
 
