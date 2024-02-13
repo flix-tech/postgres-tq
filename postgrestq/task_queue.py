@@ -116,7 +116,7 @@ class TaskQueue:
 
     def add(
         self, task: Dict[str, Any], lease_timeout: float, ttl: int = 3
-    ) -> None:
+    ) -> str:
         """Add a task to the task queue.
 
         Parameters
@@ -129,6 +129,10 @@ class TaskQueue:
             Number of (re-)tries, including the initial one, in case the
             job dies.
 
+        Returns
+        -------
+        task_id :
+            The random UUID that was generated for this task
         """
         # make sure the timeout is an actual number, otherwise we'll run
         # into problems later when we calculate the actual deadline
@@ -156,6 +160,7 @@ class TaskQueue:
                 (id_, self._queue_name, serialized_task, ttl, lease_timeout),
             )
             self.conn.commit()
+        return id_
 
     def get(self) -> Tuple[Optional[Dict[str, Any]], Optional[UUID]]:
         """Get a task from the task queue (non-blocking).
