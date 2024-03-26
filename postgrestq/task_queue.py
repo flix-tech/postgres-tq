@@ -98,6 +98,14 @@ class TaskQueue:
                         )"""
                 ).format(sql.Identifier(self._table_name))
             )
+            cur.execute(
+                sql.SQL(
+                    """CREATE INDEX IF NOT EXISTS
+                        task_queue_can_start_at_idx
+                        ON {} (can_start_at)
+                    """
+                ).format(sql.Identifier(self._table_name))
+            )
 
     def __len__(self) -> int:
         """
