@@ -1,3 +1,10 @@
+from datetime import datetime, timedelta
+# supported only from 3.11 onwards:
+# from datetime import UTC
+# workaround for older versions:
+from datetime import timezone
+UTC = timezone.utc
+
 import logging
 import time
 import os
@@ -33,12 +40,16 @@ def task_queue():
 
 def test_add(task_queue: TaskQueue):
     # add two tasks and get them back in correct order
-    TASKS = [{"foo": 1}, {"bar": 2}]
+    TASKS = [{"foo": 1}, {"bar": 2}, {"d": 56}]
     task_ids = set()
-    for task in TASKS:
-        tid = task_queue.add(task, LEASE_TIMEOUT)
+    for idx, task in enumerate(TASKS):
+        tid = task_queue.add(
+            task,
+            LEASE_TIMEOUT,
+            can_start_at=datetime.now(UTC) - timedelta(seconds=100) + timedelta(seconds=idx)
+        )
         task_ids.add(tid)
-    assert len(task_ids) == 2
+    assert len(task_ids) == 3
     task, _ = task_queue.get()
     assert task == TASKS[0]
     task, _ = task_queue.get()
