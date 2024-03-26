@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import datetime, UTC
 
 from uuid import uuid4, UUID
 from typing import Optional, Tuple, Iterator, Dict, Any, Callable
@@ -78,17 +79,17 @@ class TaskQueue:
             cur.execute(
                 sql.SQL(
                     """CREATE TABLE IF NOT EXISTS {} (
-                            id UUID PRIMARY KEY,
-                            queue_name TEXT NOT NULL,
-                            task JSONB NOT NULL,
-                            ttl INT NOT NULL,
-                            created_at TIMESTAMP NOT NULL
-                                DEFAULT CURRENT_TIMESTAMP,
-                            processing BOOLEAN NOT NULL
-                                DEFAULT false,
+                            id            UUID PRIMARY KEY,
+                            queue_name    TEXT NOT NULL,
+                            task          JSONB NOT NULL,
+                            ttl           SMALLINT NOT NULL,
+                            can_start_at  TIMESTAMPTZ NOT NULL
+                                          DEFAULT CURRENT_TIMESTAMP,
+                            processing    BOOLEAN NOT NULL
+                                          DEFAULT false,
                             lease_timeout FLOAT,
-                            deadline TIMESTAMP,
-                            completed_at TIMESTAMP
+                            started_at    TIMESTAMPTZ,
+                            completed_at  TIMESTAMPTZ
                         )"""
                 ).format(sql.Identifier(self._table_name))
             )
@@ -115,7 +116,11 @@ class TaskQueue:
             return count
 
     def add(
-        self, task: Dict[str, Any], lease_timeout: float, ttl: int = 3
+        self,
+        task: Dict[str, Any],
+        lease_timeout: float,
+        ttl: int = 3,
+        can_start_at: Optional[datetime] = None
     ) -> str:
         """Add a task to the task queue.
 
@@ -128,12 +133,17 @@ class TaskQueue:
         ttl : int
             Number of (re-)tries, including the initial one, in case the
             job dies.
-
+        can_start_at : datetime
+            The earliest time the task can be started.
+            If None, set current time. A task will not be started before this
+            time.
         Returns
         -------
         task_id :
             The random UUID that was generated for this task
         """
+        if can_start_at is None:
+            can_start_at = datetime.now(UTC)
         # make sure the timeout is an actual number, otherwise we'll run
         # into problems later when we calculate the actual deadline
         lease_timeout = float(lease_timeout)
@@ -152,12 +162,16 @@ class TaskQueue:
                     queue_name,
                     task,
                     ttl,
-                    lease_timeout
+                    lease_timeout,
+                    can_start_at
                 )
-                VALUES (%s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s)
             """
                 ).format(sql.Identifier(self._table_name)),
-                (id_, self._queue_name, serialized_task, ttl, lease_timeout),
+                (
+                    id_, self._queue_name, serialized_task,
+                    ttl, lease_timeout, can_start_at
+                ),
             )
             self.conn.commit()
         return id_
@@ -206,9 +220,7 @@ class TaskQueue:
                     """
                 UPDATE {}
                 SET processing = true,
-                    deadline =
-                        current_timestamp +
-                        CAST(lease_timeout || ' seconds' AS INTERVAL)
+                    started_at = current_timestamp
                 WHERE id = (
                     SELECT id
                     FROM {}
@@ -216,7 +228,8 @@ class TaskQueue:
                         AND processing = false
                         AND queue_name = %s
                         AND ttl > 0
-                    ORDER BY created_at
+                        AND can_start_at <= current_timestamp
+                    ORDER BY can_start_at
                     FOR UPDATE SKIP LOCKED
                     LIMIT 1
                 )
@@ -308,8 +321,10 @@ class TaskQueue:
                 WHERE completed_at IS NULL
                     AND processing = true
                     AND queue_name = %s
-                    AND deadline < NOW()
-                ORDER BY created_at;
+                    AND (
+                        started_at + (lease_timeout || ' seconds')::INTERVAL
+                        ) < current_timestamp
+                ORDER BY can_start_at;
             """
                 ).format(sql.Identifier(self._table_name)),
                 (self._queue_name,),
@@ -370,7 +385,7 @@ class TaskQueue:
                 UPDATE {}
                 SET ttl = ttl - 1,
                     processing = false,
-                    deadline = NULL
+                    started_at = NULL
                 WHERE id = (
                     SELECT id
                     FROM {}
@@ -437,7 +452,7 @@ class TaskQueue:
                     """
                 UPDATE {}
                 SET processing = false,
-                    deadline = NULL
+                    started_at = NULL
                 WHERE id = (
                     SELECT id
                     FROM {}
