@@ -1,10 +1,10 @@
 from datetime import datetime, timedelta
-try:
-    # supported only from 3.11 onwards
-    from datetime import UTC
-except ImportError:
-    from datetime import timezone
-    UTC = timezone.utc
+# supported only from 3.11 onwards:
+# from datetime import UTC
+# workaround for older versions:
+from datetime import timezone
+UTC = timezone.utc
+
 import logging
 import time
 import os

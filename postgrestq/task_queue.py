@@ -1,19 +1,17 @@
 import json
 import logging
 from datetime import datetime
-try:
-    # supported only from 3.11 onwards
-    from datetime import UTC
-except ImportError:
-    from datetime import timezone
-    UTC = timezone.utc
-
 
 from uuid import uuid4, UUID
 from typing import Optional, Tuple, Iterator, Dict, Any, Callable
 
 from psycopg import sql, connect
 
+# supported only from 3.11 onwards:
+# from datetime import UTC
+# workaround for older versions:
+from datetime import timezone
+UTC = timezone.utc
 
 logger = logging.getLogger(__name__)
 
