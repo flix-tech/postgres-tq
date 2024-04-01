@@ -3,6 +3,7 @@
 ## [unreleased]
 
 * Allow delayed schedule of tasks, use clearer name for database columns
+* Add `get_many` helper to retrieve multiple tasks with a single DB call
 
 ## 0.0.6 - 2024-02-13
 
