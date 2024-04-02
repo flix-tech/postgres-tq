@@ -189,6 +189,75 @@ class TaskQueue:
             self.conn.commit()
         return id_
 
+
+    def add_many(
+        self,
+        tasks: List[Dict[str, Any]],
+        lease_timeout: float,
+        ttl: int = 3,
+        can_start_at: Optional[datetime] = None
+    ) -> List[str]:
+        """Like add(), but optimized for a batch of tasks.
+
+        When inserting many tasks, it is faster than multiple calls to
+        add() because it uses a single transaction.
+
+        After the creation the tasks will be independent from each other.
+
+        Parameters
+        ----------
+        tasks : list of something that can be JSON-serialized
+        lease_timeout : float
+            lease timeout in seconds, i.e. how much time we give the
+            tasks to process until we can assume it didn't succeed
+        ttl : int
+            Number of (re-)tries, including the initial one, in case the
+            job dies.
+        can_start_at : datetime
+            The earliest time the task can be started.
+            If None, set current time. A task will not be started before this
+            time.
+        Returns
+        -------
+        task_ids :
+            List of random UUIDs that were generated for this task.
+            The order is the same of the given tasks
+        """
+        if can_start_at is None:
+            can_start_at = datetime.now(UTC)
+        # make sure the timeout is an actual number, otherwise we'll run
+        # into problems later when we calculate the actual deadline
+        lease_timeout = float(lease_timeout)
+        ret_ids = []
+        with self.conn.cursor() as cursor:
+            for task in tasks:
+                id_ = str(uuid4())
+
+                serialized_task = self._serialize(task)
+
+                cursor.execute(
+                    sql.SQL(
+                        """
+                    INSERT INTO {} (
+                        id,
+                        queue_name,
+                        task,
+                        ttl,
+                        lease_timeout,
+                        can_start_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """
+                    ).format(sql.Identifier(self._table_name)),
+                    (
+                        id_, self._queue_name, serialized_task,
+                        ttl, lease_timeout, can_start_at
+                    ),
+                )
+                ret_ids.append(id_)
+            self.conn.commit()
+        return ret_ids
+
     def get(self) -> Tuple[Optional[Dict[str, Any]], Optional[UUID]]:
         """Get a task from the task queue (non-blocking).
 
