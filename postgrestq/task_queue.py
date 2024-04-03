@@ -189,7 +189,6 @@ class TaskQueue:
             self.conn.commit()
         return id_
 
-
     def add_many(
         self,
         tasks: List[Dict[str, Any]],
