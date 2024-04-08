@@ -101,8 +101,8 @@ class TaskQueue:
             cur.execute(
                 sql.SQL(
                     """CREATE INDEX IF NOT EXISTS
-                        task_queue_can_start_at_idx
-                        ON {} (can_start_at)
+                        task_queue_queue_name_can_start_at_idx
+                        ON {} (queue_name, can_start_at)
                     """
                 ).format(sql.Identifier(self._table_name))
             )
