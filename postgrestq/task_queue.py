@@ -658,7 +658,7 @@ class TaskQueue:
 
         This allows to easily iterate over the tasks to process them:
 
-            >>> for task in task_queue:
+            >>> for task, task_id in task_queue:
                     execute_task(task)
 
         it takes care of marking the tasks as done once they are processed
