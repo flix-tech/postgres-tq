@@ -336,7 +336,7 @@ class TaskQueue:
         """Same as get() but retrieves multiple tasks.
 
         If there are less than `amount` tasks in the queue, it will return
-        what is available.
+        whatever is available.
 
         If no task is available it will return an empty list.
 
@@ -391,7 +391,7 @@ class TaskQueue:
         the current timestamp.
 
         If the job is in the queue, which happens if it took too long
-        and it expired, is removed from that too.
+        and it expired, it is removed from there as well.
 
 
         Parameters
@@ -434,12 +434,15 @@ class TaskQueue:
         """Check for expired leases and put the task back if needed.
 
         This method goes through all tasks that are currently processed
-        and checks if their deadline expired. If not we assume the
-        worker died. We decrease the TTL and if TTL is still > 0 we
+        and checks if their deadline expired. If so, we assume the
+        worker failed. We decrease the TTL and if TTL is still > 0 we
         reschedule the task into the task queue or, if the TTL is
         exhausted, we mark the task as completed by setting
         `completed_at` column with current timestamp and call the
         expired task callback if it's set.
+
+        This means a task that takes longer than the lease_timeout can be
+        executed more than once.
 
         Note: lease check is only performed against the tasks
         that are processing.
@@ -501,10 +504,10 @@ class TaskQueue:
         self, task_id: UUID
     ) -> Tuple[Optional[str], Optional[int]]:
         """
-        Given the id of an expired task, it tries to reschedule the
-        task by marking it as not processing, resetting the deadline
-        and decreaasing TTL by one. It returns None if the task is
-        already updated or (being updated) by another worker.
+        Given the id of an expired task, it tries to reschedule it by
+        marking it as not processing, resetting the deadline
+        and decreasing TTL by one. It returns None if the task is
+        already updated (or being updated) by another worker.
 
         Returns
         -------
