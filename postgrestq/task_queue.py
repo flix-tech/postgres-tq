@@ -106,6 +106,7 @@ class TaskQueue:
                     """
                 ).format(sql.Identifier(self._table_name))
             )
+            self.conn.commit()
 
     def __len__(self) -> int:
         """
