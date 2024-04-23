@@ -324,11 +324,11 @@ class TaskQueue:
             )
 
             row = cur.fetchone()
+            conn.commit()
             if row is None:
                 return None, None
             task_id, task = row
             logger.info(f"Got task with id {task_id}")
-            conn.commit()
             return task, task_id
 
     def get_many(self, amount: int) -> List[
