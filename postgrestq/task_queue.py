@@ -115,7 +115,7 @@ class TaskQueue:
             cursor.execute(
                 sql.SQL(
                     """
-                SELECT count(1) as count
+                SELECT count(*) as count
                 FROM {}
                 WHERE queue_name = %s
                     AND completed_at IS NULL
@@ -270,9 +270,9 @@ class TaskQueue:
         Otherwise, it returns the task and its ID.
 
         Note that this method is non-blocking, which means it returns
-        immediately even if there is no task available in the queue..
-        In order to mark that task as done, you have
-        to use:
+        immediately even if there is no task available in the queue.
+
+        In order to mark that task as done, you have to do:
 
             >>> task, task_id = taskqueue.get()
             >>> # do something
