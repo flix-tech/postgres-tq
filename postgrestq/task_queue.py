@@ -90,8 +90,6 @@ class TaskQueue:
                             ttl           SMALLINT NOT NULL,
                             can_start_at  TIMESTAMPTZ NOT NULL
                                           DEFAULT CURRENT_TIMESTAMP,
-                            processing    BOOLEAN NOT NULL
-                                          DEFAULT false,
                             lease_timeout FLOAT,
                             started_at    TIMESTAMPTZ,
                             completed_at  TIMESTAMPTZ
@@ -301,13 +299,12 @@ class TaskQueue:
                 sql.SQL(
                     """
                 UPDATE {}
-                SET processing = true,
-                    started_at = current_timestamp
+                SET started_at = current_timestamp
                 WHERE id = (
                     SELECT id
                     FROM {}
                     WHERE completed_at IS NULL
-                        AND processing = false
+                        AND started_at IS NULL
                         AND queue_name = %s
                         AND ttl > 0
                         AND can_start_at <= current_timestamp
@@ -356,13 +353,12 @@ class TaskQueue:
                 sql.SQL(
                     """
                 UPDATE {}
-                SET processing = true,
-                    started_at = current_timestamp
+                SET started_at = current_timestamp
                 WHERE id IN (
                     SELECT id
                     FROM {}
                     WHERE completed_at IS NULL
-                        AND processing = false
+                        AND started_at IS NULL
                         AND queue_name = %s
                         AND ttl > 0
                         AND can_start_at <= current_timestamp
@@ -408,8 +404,7 @@ class TaskQueue:
                 sql.SQL(
                     """
                 UPDATE {}
-                SET completed_at = current_timestamp,
-                    processing = false
+                SET completed_at = current_timestamp
                 WHERE id = %s"""
                 ).format(sql.Identifier(self._table_name)),
                 (task_id,),
@@ -446,10 +441,10 @@ class TaskQueue:
         executed more than once.
 
         Note: lease check is only performed against the tasks
-        that are processing.
+        that are processing (started_at is not null).
 
         """
-        # goes through all the tasks that are marked as processing
+        # goes through all the tasks that are marked as started
         # and check the ones with expired timeout
         with self.conn.cursor() as cur:
             cur.execute(
@@ -458,7 +453,7 @@ class TaskQueue:
                 SELECT id
                 FROM {}
                 WHERE completed_at IS NULL
-                    AND processing = true
+                    AND started_at IS NOT NULL
                     AND queue_name = %s
                     AND (
                         started_at + (lease_timeout || ' seconds')::INTERVAL
@@ -523,13 +518,12 @@ class TaskQueue:
                     """
                 UPDATE {}
                 SET ttl = ttl - 1,
-                    processing = false,
                     started_at = NULL
                 WHERE id = (
                     SELECT id
                     FROM {}
                     WHERE completed_at IS NULL
-                        AND processing = true
+                        AND started_at IS NOT NULL
                         AND queue_name = %s
                         AND id = %s
                     FOR UPDATE SKIP LOCKED
@@ -590,12 +584,11 @@ class TaskQueue:
                 sql.SQL(
                     """
                 UPDATE {}
-                SET processing = false,
-                    started_at = NULL
+                SET started_at = NULL
                 WHERE id = (
                     SELECT id
                     FROM {}
-                    WHERE processing = true
+                    WHERE started_at IS NOT NULL
                         AND id = %s
                     FOR UPDATE SKIP LOCKED
                 )
@@ -645,7 +638,6 @@ class TaskQueue:
                     DELETE FROM {}
                     WHERE queue_name = %s
                         AND completed_at IS NOT NULL
-                        AND processing = false
                         AND completed_at < current_timestamp - CAST(
                             %s || ' seconds' AS INTERVAL);
                     """
