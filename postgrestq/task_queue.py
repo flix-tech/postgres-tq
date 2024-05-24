@@ -256,7 +256,11 @@ class TaskQueue:
             self.conn.commit()
         return ret_ids
 
-    def get(self) -> Tuple[Optional[Dict[str, Any]], Optional[UUID]]:
+    def get(self) -> Tuple[
+            Optional[Dict[str, Any]],
+            Optional[UUID],
+            Optional[str],
+            ]:
         """Get a task from the task queue (non-blocking).
 
         This statement marks the next available task in the queue as
@@ -273,7 +277,7 @@ class TaskQueue:
 
         In order to mark that task as done, you have to do:
 
-            >>> task, task_id = taskqueue.get()
+            >>> task, task_id, queue_name = taskqueue.get()
             >>> # do something
             >>> taskqueue.complete(task_id)
 
@@ -287,8 +291,8 @@ class TaskQueue:
 
         Returns
         -------
-        (task, task_id) :
-            The next item from the task list or (None, None) if it's
+        (task, task_id, queue_name) :
+            The next item from the task list or (None, None, None) if it's
             empty
 
         """
@@ -323,13 +327,13 @@ class TaskQueue:
             row = cur.fetchone()
             conn.commit()
             if row is None:
-                return None, None
+                return None, None, None
             task_id, task = row
             logger.info(f"Got task with id {task_id}")
-            return task, task_id
+            return task, task_id, self._queue_name
 
     def get_many(self, amount: int) -> List[
-        Tuple[Optional[Dict[str, Any]], Optional[UUID]]
+        Tuple[Optional[Dict[str, Any]], Optional[UUID], Optional[str]],
             ]:
         """Same as get() but retrieves multiple tasks.
 
@@ -342,8 +346,8 @@ class TaskQueue:
 
         Returns
         -------
-        list of (task, task_id) :
-            The tasks and their IDs
+        list of (task, task_id, queue_name) :
+            The tasks and their IDs, and the queue_name
 
         """
         conn = self.conn
@@ -375,9 +379,9 @@ class TaskQueue:
             )
 
             ret = []
-            for row in cur.fetchall():
-                logger.info(f"Got task with id {row[1]}")
-                ret.append(row)
+            for task, task_id in cur.fetchall():
+                logger.info(f"Got task with id {task_id}")
+                ret.append((task, task_id, self._queue_name,))
             conn.commit()
             return ret
 
@@ -665,14 +669,14 @@ class TaskQueue:
 
         Yields
         -------
-        (any, str) :
-            A tuple containing the task content and its id
+        (any, UUID, str) :
+            A tuple containing the task content, its id and the queue name
 
         """
         while True:
-            task, id_ = self.get()
+            task, id_, queue_name = self.get()
             if id_ is not None:
-                yield task, id_
+                yield task, id_, queue_name
                 self.complete(id_)
             if self.is_empty():
                 logger.debug(

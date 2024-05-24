@@ -59,7 +59,7 @@ from postgrestq import TaskQueue
 
 task_queue = TaskQueue(POSTGRES_CONN_STR, queue_name, reset=True)
 while True:
-    task, task_id = task_queue.get()
+    task, task_id, _queue_name = task_queue.get()
     if task is not None:
         # do something with task and mark it as complete afterwards
         task_queue.complete(task_id)
@@ -70,6 +70,9 @@ while True:
     time.sleep(1)
 ```
 
+Notice that `get()` returns the queue name too, in case in future multi-queue is implemented.
+At the moment it's always the same as the queue_name given to the class.
+
 Or you can even use the \_\_iter\_\_() method of the class TaskQueue and loop over the queue:
 
 ```py
@@ -77,7 +80,7 @@ from postgrestq import TaskQueue
 
 task_queue = TaskQueue(POSTGRES_CONN_STR, queue_name, reset=True)
 
-for task, id_ in taskqueue:
+for task, id_, queue_name in taskqueue:
     # do something with task and it's automatically
     # marked as completed by the iterator at the end
     # of the iteration
