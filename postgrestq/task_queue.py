@@ -3,7 +3,16 @@ import logging
 from datetime import datetime
 
 from uuid import uuid4, UUID
-from typing import Optional, Tuple, Iterator, Dict, Any, Callable, List
+from typing import (
+    Optional,
+    Tuple,
+    Iterator,
+    Dict,
+    Any,
+    Callable,
+    List,
+    Sequence,
+)
 
 from psycopg import sql, connect
 
@@ -332,7 +341,7 @@ class TaskQueue:
             logger.info(f"Got task with id {task_id}")
             return task, task_id, self._queue_name
 
-    def get_many(self, amount: int) -> List[
+    def get_many(self, amount: int) -> Sequence[
         Tuple[Optional[Dict[str, Any]], Optional[UUID], Optional[str]],
             ]:
         """Same as get() but retrieves multiple tasks.
@@ -653,7 +662,13 @@ class TaskQueue:
 
     def __iter__(
         self,
-    ) -> Iterator[Tuple[Optional[Dict[str, Any]], Optional[UUID]]]:
+    ) -> Iterator[
+                Tuple[
+                    Optional[Dict[str, Any]],
+                    Optional[UUID],
+                    Optional[str]
+                ]
+            ]:
         """Iterate over tasks and mark them as complete.
 
         This allows to easily iterate over the tasks to process them:
