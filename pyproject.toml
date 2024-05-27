@@ -33,3 +33,6 @@ license = {text = "MIT"}
 [build-system]
 requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.package-data]
+"postgrestq" = ["py.typed"]

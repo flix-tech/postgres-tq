@@ -1,11 +1,26 @@
 import json
 import logging
+from datetime import datetime
 
 from uuid import uuid4, UUID
-from typing import Optional, Tuple, Iterator, Dict, Any, Callable
+from typing import (
+    Optional,
+    Tuple,
+    Iterator,
+    Dict,
+    Any,
+    Callable,
+    List,
+    Sequence,
+)
 
 from psycopg import sql, connect
 
+# supported only from 3.11 onwards:
+# from datetime import UTC
+# workaround for older versions:
+from datetime import timezone
+UTC = timezone.utc
 
 logger = logging.getLogger(__name__)
 
@@ -78,20 +93,27 @@ class TaskQueue:
             cur.execute(
                 sql.SQL(
                     """CREATE TABLE IF NOT EXISTS {} (
-                            id UUID PRIMARY KEY,
-                            queue_name TEXT NOT NULL,
-                            task JSONB NOT NULL,
-                            ttl INT NOT NULL,
-                            created_at TIMESTAMP NOT NULL
-                                DEFAULT CURRENT_TIMESTAMP,
-                            processing BOOLEAN NOT NULL
-                                DEFAULT false,
+                            id            UUID PRIMARY KEY,
+                            queue_name    TEXT NOT NULL,
+                            task          JSONB NOT NULL,
+                            ttl           SMALLINT NOT NULL,
+                            can_start_at  TIMESTAMPTZ NOT NULL
+                                          DEFAULT CURRENT_TIMESTAMP,
                             lease_timeout FLOAT,
-                            deadline TIMESTAMP,
-                            completed_at TIMESTAMP
+                            started_at    TIMESTAMPTZ,
+                            completed_at  TIMESTAMPTZ
                         )"""
                 ).format(sql.Identifier(self._table_name))
             )
+            cur.execute(
+                sql.SQL(
+                    """CREATE INDEX IF NOT EXISTS
+                        task_queue_queue_name_can_start_at_idx
+                        ON {} (queue_name, can_start_at)
+                    """
+                ).format(sql.Identifier(self._table_name))
+            )
+            self.conn.commit()
 
     def __len__(self) -> int:
         """
@@ -101,7 +123,7 @@ class TaskQueue:
             cursor.execute(
                 sql.SQL(
                     """
-                SELECT count(1) as count
+                SELECT count(*) as count
                 FROM {}
                 WHERE queue_name = %s
                     AND completed_at IS NULL
@@ -115,7 +137,11 @@ class TaskQueue:
             return count
 
     def add(
-        self, task: Dict[str, Any], lease_timeout: float, ttl: int = 3
+        self,
+        task: Dict[str, Any],
+        lease_timeout: float,
+        ttl: int = 3,
+        can_start_at: Optional[datetime] = None
     ) -> str:
         """Add a task to the task queue.
 
@@ -128,12 +154,17 @@ class TaskQueue:
         ttl : int
             Number of (re-)tries, including the initial one, in case the
             job dies.
-
+        can_start_at : datetime
+            The earliest time the task can be started.
+            If None, set current time. A task will not be started before this
+            time.
         Returns
         -------
         task_id :
             The random UUID that was generated for this task
         """
+        if can_start_at is None:
+            can_start_at = datetime.now(UTC)
         # make sure the timeout is an actual number, otherwise we'll run
         # into problems later when we calculate the actual deadline
         lease_timeout = float(lease_timeout)
@@ -152,17 +183,93 @@ class TaskQueue:
                     queue_name,
                     task,
                     ttl,
-                    lease_timeout
+                    lease_timeout,
+                    can_start_at
                 )
-                VALUES (%s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s)
             """
                 ).format(sql.Identifier(self._table_name)),
-                (id_, self._queue_name, serialized_task, ttl, lease_timeout),
+                (
+                    id_, self._queue_name, serialized_task,
+                    ttl, lease_timeout, can_start_at
+                ),
             )
             self.conn.commit()
         return id_
 
-    def get(self) -> Tuple[Optional[Dict[str, Any]], Optional[UUID]]:
+    def add_many(
+        self,
+        tasks: List[Dict[str, Any]],
+        lease_timeout: float,
+        ttl: int = 3,
+        can_start_at: Optional[datetime] = None
+    ) -> List[str]:
+        """Like add(), but optimized for a batch of tasks.
+
+        When inserting many tasks, it is faster than multiple calls to
+        add() because it uses a single transaction.
+
+        After the creation the tasks will be independent from each other.
+
+        Parameters
+        ----------
+        tasks : list of something that can be JSON-serialized
+        lease_timeout : float
+            lease timeout in seconds, i.e. how much time we give the
+            tasks to process until we can assume it didn't succeed
+        ttl : int
+            Number of (re-)tries, including the initial one, in case the
+            job dies.
+        can_start_at : datetime
+            The earliest time the task can be started.
+            If None, set current time. A task will not be started before this
+            time.
+        Returns
+        -------
+        task_ids :
+            List of random UUIDs that were generated for this task.
+            The order is the same of the given tasks
+        """
+        if can_start_at is None:
+            can_start_at = datetime.now(UTC)
+        # make sure the timeout is an actual number, otherwise we'll run
+        # into problems later when we calculate the actual deadline
+        lease_timeout = float(lease_timeout)
+        ret_ids = []
+        with self.conn.cursor() as cursor:
+            for task in tasks:
+                id_ = str(uuid4())
+
+                serialized_task = self._serialize(task)
+
+                cursor.execute(
+                    sql.SQL(
+                        """
+                    INSERT INTO {} (
+                        id,
+                        queue_name,
+                        task,
+                        ttl,
+                        lease_timeout,
+                        can_start_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """
+                    ).format(sql.Identifier(self._table_name)),
+                    (
+                        id_, self._queue_name, serialized_task,
+                        ttl, lease_timeout, can_start_at
+                    ),
+                )
+                ret_ids.append(id_)
+            self.conn.commit()
+        return ret_ids
+
+    def get(self) -> Tuple[
+            Optional[Dict[str, Any]],
+            Optional[UUID],
+            Optional[str],
+            ]:
         """Get a task from the task queue (non-blocking).
 
         This statement marks the next available task in the queue as
@@ -175,11 +282,11 @@ class TaskQueue:
         Otherwise, it returns the task and its ID.
 
         Note that this method is non-blocking, which means it returns
-        immediately even if there is no task available in the queue..
-        In order to mark that task as done, you have
-        to use:
+        immediately even if there is no task available in the queue.
 
-            >>> task, task_id = taskqueue.get()
+        In order to mark that task as done, you have to do:
+
+            >>> task, task_id, queue_name = taskqueue.get()
             >>> # do something
             >>> taskqueue.complete(task_id)
 
@@ -193,8 +300,8 @@ class TaskQueue:
 
         Returns
         -------
-        (task, task_id) :
-            The next item from the task list or (None, None) if it's
+        (task, task_id, queue_name) :
+            The next item from the task list or (None, None, None) if it's
             empty
 
         """
@@ -205,18 +312,16 @@ class TaskQueue:
                 sql.SQL(
                     """
                 UPDATE {}
-                SET processing = true,
-                    deadline =
-                        current_timestamp +
-                        CAST(lease_timeout || ' seconds' AS INTERVAL)
+                SET started_at = current_timestamp
                 WHERE id = (
                     SELECT id
                     FROM {}
                     WHERE completed_at IS NULL
-                        AND processing = false
+                        AND started_at IS NULL
                         AND queue_name = %s
                         AND ttl > 0
-                    ORDER BY created_at
+                        AND can_start_at <= current_timestamp
+                    ORDER BY can_start_at
                     FOR UPDATE SKIP LOCKED
                     LIMIT 1
                 )
@@ -229,12 +334,65 @@ class TaskQueue:
             )
 
             row = cur.fetchone()
+            conn.commit()
             if row is None:
-                return None, None
+                return None, None, None
             task_id, task = row
             logger.info(f"Got task with id {task_id}")
+            return task, task_id, self._queue_name
+
+    def get_many(self, amount: int) -> Sequence[
+        Tuple[Optional[Dict[str, Any]], Optional[UUID], Optional[str]],
+            ]:
+        """Same as get() but retrieves multiple tasks.
+
+        If there are less than `amount` tasks in the queue, it will return
+        whatever is available.
+
+        If no task is available it will return an empty list.
+
+        This is faster than multiple calls to get(), as it uses a single query.
+
+        Returns
+        -------
+        list of (task, task_id, queue_name) :
+            The tasks and their IDs, and the queue_name
+
+        """
+        conn = self.conn
+
+        with conn.cursor() as cur:
+            cur.execute(
+                sql.SQL(
+                    """
+                UPDATE {}
+                SET started_at = current_timestamp
+                WHERE id IN (
+                    SELECT id
+                    FROM {}
+                    WHERE completed_at IS NULL
+                        AND started_at IS NULL
+                        AND queue_name = %s
+                        AND ttl > 0
+                        AND can_start_at <= current_timestamp
+                    ORDER BY can_start_at
+                    FOR UPDATE SKIP LOCKED
+                    LIMIT %s
+                )
+                RETURNING task, id;"""
+                ).format(
+                    sql.Identifier(self._table_name),
+                    sql.Identifier(self._table_name),
+                ),
+                (self._queue_name, amount),
+            )
+
+            ret = []
+            for task, task_id in cur.fetchall():
+                logger.info(f"Got task with id {task_id}")
+                ret.append((task, task_id, self._queue_name,))
             conn.commit()
-            return task, task_id
+            return ret
 
     def complete(self, task_id: Optional[UUID]) -> None:
         """Mark a task as completed.
@@ -243,7 +401,7 @@ class TaskQueue:
         the current timestamp.
 
         If the job is in the queue, which happens if it took too long
-        and it expired, is removed from that too.
+        and it expired, it is removed from there as well.
 
 
         Parameters
@@ -259,8 +417,7 @@ class TaskQueue:
                 sql.SQL(
                     """
                 UPDATE {}
-                SET completed_at = current_timestamp,
-                    processing = false
+                SET completed_at = current_timestamp
                 WHERE id = %s"""
                 ).format(sql.Identifier(self._table_name)),
                 (task_id,),
@@ -286,18 +443,21 @@ class TaskQueue:
         """Check for expired leases and put the task back if needed.
 
         This method goes through all tasks that are currently processed
-        and checks if their deadline expired. If not we assume the
-        worker died. We decrease the TTL and if TTL is still > 0 we
+        and checks if their deadline expired. If so, we assume the
+        worker failed. We decrease the TTL and if TTL is still > 0 we
         reschedule the task into the task queue or, if the TTL is
         exhausted, we mark the task as completed by setting
         `completed_at` column with current timestamp and call the
         expired task callback if it's set.
 
+        This means a task that takes longer than the lease_timeout can be
+        executed more than once.
+
         Note: lease check is only performed against the tasks
-        that are processing.
+        that are processing (started_at is not null).
 
         """
-        # goes through all the tasks that are marked as processing
+        # goes through all the tasks that are marked as started
         # and check the ones with expired timeout
         with self.conn.cursor() as cur:
             cur.execute(
@@ -306,10 +466,12 @@ class TaskQueue:
                 SELECT id
                 FROM {}
                 WHERE completed_at IS NULL
-                    AND processing = true
+                    AND started_at IS NOT NULL
                     AND queue_name = %s
-                    AND deadline < NOW()
-                ORDER BY created_at;
+                    AND (
+                        started_at + (lease_timeout || ' seconds')::INTERVAL
+                        ) < current_timestamp
+                ORDER BY can_start_at;
             """
                 ).format(sql.Identifier(self._table_name)),
                 (self._queue_name,),
@@ -351,10 +513,10 @@ class TaskQueue:
         self, task_id: UUID
     ) -> Tuple[Optional[str], Optional[int]]:
         """
-        Given the id of an expired task, it tries to reschedule the
-        task by marking it as not processing, resetting the deadline
-        and decreaasing TTL by one. It returns None if the task is
-        already updated or (being updated) by another worker.
+        Given the id of an expired task, it tries to reschedule it by
+        marking it as not processing, resetting the deadline
+        and decreasing TTL by one. It returns None if the task is
+        already updated (or being updated) by another worker.
 
         Returns
         -------
@@ -369,13 +531,12 @@ class TaskQueue:
                     """
                 UPDATE {}
                 SET ttl = ttl - 1,
-                    processing = false,
-                    deadline = NULL
+                    started_at = NULL
                 WHERE id = (
                     SELECT id
                     FROM {}
                     WHERE completed_at IS NULL
-                        AND processing = true
+                        AND started_at IS NOT NULL
                         AND queue_name = %s
                         AND id = %s
                     FOR UPDATE SKIP LOCKED
@@ -436,12 +597,11 @@ class TaskQueue:
                 sql.SQL(
                     """
                 UPDATE {}
-                SET processing = false,
-                    deadline = NULL
+                SET started_at = NULL
                 WHERE id = (
                     SELECT id
                     FROM {}
-                    WHERE processing = true
+                    WHERE started_at IS NOT NULL
                         AND id = %s
                     FOR UPDATE SKIP LOCKED
                 )
@@ -491,7 +651,6 @@ class TaskQueue:
                     DELETE FROM {}
                     WHERE queue_name = %s
                         AND completed_at IS NOT NULL
-                        AND processing = false
                         AND completed_at < current_timestamp - CAST(
                             %s || ' seconds' AS INTERVAL);
                     """
@@ -503,12 +662,18 @@ class TaskQueue:
 
     def __iter__(
         self,
-    ) -> Iterator[Tuple[Optional[Dict[str, Any]], Optional[UUID]]]:
+    ) -> Iterator[
+                Tuple[
+                    Optional[Dict[str, Any]],
+                    Optional[UUID],
+                    Optional[str]
+                ]
+            ]:
         """Iterate over tasks and mark them as complete.
 
         This allows to easily iterate over the tasks to process them:
 
-            >>> for task in task_queue:
+            >>> for task, task_id in task_queue:
                     execute_task(task)
 
         it takes care of marking the tasks as done once they are processed
@@ -519,14 +684,14 @@ class TaskQueue:
 
         Yields
         -------
-        (any, str) :
-            A tuple containing the task content and its id
+        (any, UUID, str) :
+            A tuple containing the task content, its id and the queue name
 
         """
         while True:
-            task, id_ = self.get()
+            task, id_, queue_name = self.get()
             if id_ is not None:
-                yield task, id_
+                yield task, id_, queue_name
                 self.complete(id_)
             if self.is_empty():
                 logger.debug(
