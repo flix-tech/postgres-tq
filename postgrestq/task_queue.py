@@ -691,6 +691,9 @@ class TaskQueue:
         while True:
             task, id_, queue_name = self.get()
             if id_ is not None:
+                # they are always None together, restrict the type
+                assert task is not None
+                assert queue_name is not None
                 yield task, id_, queue_name
                 self.complete(id_)
             if self.is_empty():
