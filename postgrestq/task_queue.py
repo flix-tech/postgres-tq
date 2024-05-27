@@ -664,9 +664,9 @@ class TaskQueue:
         self,
     ) -> Iterator[
                 Tuple[
-                    Optional[Dict[str, Any]],
-                    Optional[UUID],
-                    Optional[str]
+                    Dict[str, Any],
+                    UUID,
+                    str
                 ]
             ]:
         """Iterate over tasks and mark them as complete.
