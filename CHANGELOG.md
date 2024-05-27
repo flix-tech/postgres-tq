@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1 - 2024-05-27
+
+* Restrict the type yielded by the generator to never be None
+
 ## 1.0.0 - 2024-05-27
 
 * Allow delayed schedule of tasks, use clearer name for database columns
