@@ -1,11 +1,13 @@
 # Changelog
 
-## [unreleased]
+## 1.0.0 - 2024-05-27
 
 * Allow delayed schedule of tasks, use clearer name for database columns
 * Add `get_many` helper to retrieve multiple tasks with a single DB call
 * Add `add_many` helper to insert multiple tasks with a single transaction
 * Create an index on the table, can now scale to millions of tasks
+* Every method returning tasks returns the queue name too, in case multi-queue is added later
+* Type hints are made available to users thanks to `py.typed`
 
 ## 0.0.6 - 2024-02-13
 
