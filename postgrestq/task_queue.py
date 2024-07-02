@@ -394,7 +394,7 @@ class TaskQueue:
             conn.commit()
             return ret
 
-    def complete(self, task_id: Optional[UUID]) -> None:
+    def complete(self, task_id: Optional[UUID]) -> int:
         """Mark a task as completed.
 
         Marks a task as completed by setting completed_at column by
@@ -409,20 +409,31 @@ class TaskQueue:
         task_id : UUID | None
             the task ID
 
+        Returns
+        -------
+        the number of updated rows: int
+
         """
         logger.info(f"Marking task {task_id} as completed")
         conn = self.conn
+        count = 0
         with conn.cursor() as cur:
             cur.execute(
                 sql.SQL(
                     """
                 UPDATE {}
                 SET completed_at = current_timestamp
-                WHERE id = %s"""
+                WHERE id = %s
+                AND completed_at is NULL"""
                 ).format(sql.Identifier(self._table_name)),
                 (task_id,),
             )
+            count = cur.rowcount
+            if count == 0:
+                logger.info(f"Task {task_id} was already completed")
+
             conn.commit()
+        return count
 
     def is_empty(self) -> bool:
         """Check if the task queue is empty.
