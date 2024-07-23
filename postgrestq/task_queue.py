@@ -273,8 +273,8 @@ class TaskQueue:
         """Get a task from the task queue (non-blocking).
 
         This statement marks the next available task in the queue as
-        started (being processed) and returns its ID and task details. The query
-        uses a FOR UPDATE SKIP LOCKED clause to lock the selected
+        started (being processed) and returns its ID and task details.
+        The query uses a FOR UPDATE SKIP LOCKED clause to lock the selected
         task so that other workers can't select the same task simultaneously.
 
         After executing the query, the method fetches the result using
@@ -582,7 +582,7 @@ class TaskQueue:
     def reschedule(
         self,
         task_id: UUID,
-        decrease_ttl: Optional[bool]=False
+        decrease_ttl: Optional[bool] = False,
     ) -> None:
         """Move a task back from being processed to the task queue.
 
