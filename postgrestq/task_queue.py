@@ -273,7 +273,7 @@ class TaskQueue:
         """Get a task from the task queue (non-blocking).
 
         This statement marks the next available task in the queue as
-        "processing" and returns its ID and task details. The query
+        started (being processed) and returns its ID and task details. The query
         uses a FOR UPDATE SKIP LOCKED clause to lock the selected
         task so that other workers can't select the same task simultaneously.
 
@@ -291,7 +291,7 @@ class TaskQueue:
             >>> taskqueue.complete(task_id)
 
         After some time (i.e. `lease_timeout`) tasks expire and are
-        marked as not processing and the TTL is decreased by
+        marked as not being processed and the TTL is decreased by
         one. If TTL is still > 0 the task will be retried.
 
         Note, this method is non-blocking, i.e. it returns immediately
@@ -525,7 +525,7 @@ class TaskQueue:
     ) -> Tuple[Optional[str], Optional[int]]:
         """
         Given the id of an expired task, it tries to reschedule it by
-        marking it as not processing, resetting the deadline
+        marking it as not started, resetting the deadline
         and decreasing TTL by one. It returns None if the task is
         already updated (or being updated) by another worker.
 
