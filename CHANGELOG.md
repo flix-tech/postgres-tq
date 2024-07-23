@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.0 - 2024-07-23
+
+* The `reschedule()` method have an optional parameter to decrease the ttl if set to True (False by default).
+
 ## 1.1.0 - 2024-07-01
 
 * The `complete()` method now returns the count of updated tasks, 0 if it was already completed
