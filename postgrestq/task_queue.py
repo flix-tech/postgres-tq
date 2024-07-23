@@ -579,19 +579,25 @@ class TaskQueue:
     def _deserialize(self, blob: str) -> Any:
         return json.loads(blob)
 
-    def reschedule(self, task_id: UUID) -> None:
+    def reschedule(
+        self,
+        task_id: UUID,
+        decrease_ttl: Optional[bool]=False
+    ) -> None:
         """Move a task back from being processed to the task queue.
 
         Workers can use this method to "drop" a work unit in case of
         eviction (because of an external issue like terminating a machine
         by aws and not because of a failure).
 
-        This function does not modify the TTL.
+        This function can optionally modify the TTL.
 
         Parameters
         ----------
         task_id : UUID
             the task ID
+        decrease_ttl : bool
+            If True, decrease the TTL by one
 
         Raises
         ------
@@ -603,13 +609,17 @@ class TaskQueue:
         if not isinstance(task_id, UUID):
             raise ValueError("task_id must be a UUID")
         logger.info(f"Rescheduling task {task_id}..")
+        decrease_ttl_sql = ""
+        if decrease_ttl:
+            decrease_ttl_sql = "ttl = ttl - 1,"
+
         conn = self.conn
         with conn.cursor() as cur:
             cur.execute(
                 sql.SQL(
                     """
                 UPDATE {}
-                SET started_at = NULL
+                SET {} started_at = NULL
                 WHERE id = (
                     SELECT id
                     FROM {}
@@ -620,6 +630,7 @@ class TaskQueue:
                 RETURNING id;"""
                 ).format(
                     sql.Identifier(self._table_name),
+                    sql.SQL(decrease_ttl_sql),
                     sql.Identifier(self._table_name),
                 ),
                 (task_id,),
