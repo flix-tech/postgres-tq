@@ -579,17 +579,18 @@ class TaskQueue:
     def _deserialize(self, blob: str) -> Any:
         return json.loads(blob)
 
-    def reschedule(self, task_id: Optional[UUID]) -> None:
-        """Move a task back from the processing- to the task queue.
+    def reschedule(self, task_id: UUID) -> None:
+        """Move a task back from being processed to the task queue.
 
         Workers can use this method to "drop" a work unit in case of
-        eviction.
+        eviction (because of an external issue like terminating a machine
+        by aws and not because of a failure).
 
         This function does not modify the TTL.
 
         Parameters
         ----------
-        task_id : str
+        task_id : UUID
             the task ID
 
         Raises
