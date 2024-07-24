@@ -156,15 +156,14 @@ class TaskQueue:
             job dies.
         can_start_at : datetime
             The earliest time the task can be started.
-            If None, set current time. A task will not be started before this
-            time.
+            If None, set current time. For consistency the time is
+            from the database clock. A task will not be started before
+            this time.
         Returns
         -------
         task_id :
             The random UUID that was generated for this task
         """
-        if can_start_at is None:
-            can_start_at = datetime.now(UTC)
         # make sure the timeout is an actual number, otherwise we'll run
         # into problems later when we calculate the actual deadline
         lease_timeout = float(lease_timeout)
@@ -186,7 +185,7 @@ class TaskQueue:
                     lease_timeout,
                     can_start_at
                 )
-                VALUES (%s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, COALESCE(%s, current_timestamp))
             """
                 ).format(sql.Identifier(self._table_name)),
                 (
@@ -222,7 +221,8 @@ class TaskQueue:
             job dies.
         can_start_at : datetime
             The earliest time the task can be started.
-            If None, set current time. A task will not be started before this
+            If None, set current time. For consistency the time is
+            from the database clock. A task will not be started before this
             time.
         Returns
         -------
@@ -230,8 +230,6 @@ class TaskQueue:
             List of random UUIDs that were generated for this task.
             The order is the same of the given tasks
         """
-        if can_start_at is None:
-            can_start_at = datetime.now(UTC)
         # make sure the timeout is an actual number, otherwise we'll run
         # into problems later when we calculate the actual deadline
         lease_timeout = float(lease_timeout)
@@ -253,7 +251,9 @@ class TaskQueue:
                         lease_timeout,
                         can_start_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    VALUES (
+                        %s, %s, %s, %s, %s, COALESCE(%s, current_timestamp)
+                    )
                 """
                     ).format(sql.Identifier(self._table_name)),
                     (
