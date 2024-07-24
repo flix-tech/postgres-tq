@@ -4,8 +4,8 @@
 [metadata]
 groups = ["default", "lint", "mypy", "test"]
 strategy = ["cross_platform"]
-lock_version = "4.4.1"
-content_hash = "sha256:2ae4f092c2ec5b943df2a3dcb8a95a65437a3763ef25debeda988a5890e06de6"
+lock_version = "4.4.2"
+content_hash = "sha256:4f11b411e3dd76b58bce4754af1344f6cf39cfe87bb0d5c28598e43f223e1e93"
 
 [[package]]
 name = "colorama"
@@ -258,12 +258,12 @@ files = [
 
 [[package]]
 name = "typing-extensions"
-version = "4.5.0"
-requires_python = ">=3.7"
-summary = "Backported and Experimental Type Hints for Python 3.7+"
+version = "4.12.2"
+requires_python = ">=3.8"
+summary = "Backported and Experimental Type Hints for Python 3.8+"
 files = [
-    {file = "typing_extensions-4.5.0-py3-none-any.whl", hash = "sha256:fb33085c39dd998ac16d1431ebc293a8b3eedd00fd4a32de0ff79002c19511b4"},
-    {file = "typing_extensions-4.5.0.tar.gz", hash = "sha256:5cb5f4a79139d699607b3ef622a1dedafa84e115ab0024e0d9c044a9479ca7cb"},
+    {file = "typing_extensions-4.12.2-py3-none-any.whl", hash = "sha256:04e5ca0351e0f3f85c6853954072df659d0d13fac324d0072316b67d7794700d"},
+    {file = "typing_extensions-4.12.2.tar.gz", hash = "sha256:1a7ead55c7e559dd4dee8856e3a88b41225abfe1ce8df57b7c13915fe121ffb8"},
 ]
 
 [[package]]
