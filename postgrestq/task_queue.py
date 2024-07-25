@@ -588,9 +588,13 @@ class TaskQueue:
 
         Workers can use this method to "drop" a work unit in case of
         eviction (because of an external issue like terminating a machine
-        by aws and not because of a failure).
+        by AWS and not because of a failure).
+        Rescheduled work units are immediately available for processing again,
+        and unless decrease_ttl is set to True, the TTL is not modified.
 
-        This function can optionally modify the TTL.
+        This function can optionally modify the TTL, setting decrease_ttl to
+        True. This allows to handle a failure quickly without waiting the
+        lease_timeout.
 
         Parameters
         ----------

@@ -1,9 +1,9 @@
 # Changelog
 
-## 1.2.0 - 2024-07-23
+## 1.2.0 - 2024-07-25
 
-* The `reschedule()` method have an optional parameter to decrease the ttl if set to True (False by default).
-* The `add()` and `addMany()` methods set the can_start_at by default to the current time of the database clock for consistency.
+* The `reschedule()` method has an optional parameter to decrease the TTL if set to True (False by default).
+* The `add()` and `add_many()` methods set the `can_start_at` by default to the current time of the database clock, not Python, for consistency.
 
 ## 1.1.0 - 2024-07-01
 
