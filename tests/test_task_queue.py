@@ -176,6 +176,19 @@ def test_reschedule(task_queue: TaskQueue):
     assert qname == "test_queue"
 
 
+def test_reschedule_with_ttl(task_queue: TaskQueue):
+    task_queue.add({"foo": 1}, LEASE_TIMEOUT, 2)
+    _, id_, qname = task_queue.get()
+    # task queue should be empty as 'foo' is in the processing queue
+    assert task_queue.get() == (None, None, None)
+    assert qname == "test_queue"
+    task_queue.reschedule(id_, decrease_ttl=True)
+    task, _, qname = task_queue.get()
+    assert task == {"foo": 1}
+    # task queue should be empty because the task is expired(ttl=0)
+    assert task_queue.get() == (None, None, None)
+
+
 def test_reschedule_error(task_queue: TaskQueue):
     with pytest.raises(ValueError):
         task_queue.reschedule("bar")

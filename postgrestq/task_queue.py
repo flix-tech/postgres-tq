@@ -156,15 +156,14 @@ class TaskQueue:
             job dies.
         can_start_at : datetime
             The earliest time the task can be started.
-            If None, set current time. A task will not be started before this
-            time.
+            If None, set current time. For consistency the time is
+            from the database clock. A task will not be started before
+            this time.
         Returns
         -------
         task_id :
             The random UUID that was generated for this task
         """
-        if can_start_at is None:
-            can_start_at = datetime.now(UTC)
         # make sure the timeout is an actual number, otherwise we'll run
         # into problems later when we calculate the actual deadline
         lease_timeout = float(lease_timeout)
@@ -186,7 +185,7 @@ class TaskQueue:
                     lease_timeout,
                     can_start_at
                 )
-                VALUES (%s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, COALESCE(%s, current_timestamp))
             """
                 ).format(sql.Identifier(self._table_name)),
                 (
@@ -222,7 +221,8 @@ class TaskQueue:
             job dies.
         can_start_at : datetime
             The earliest time the task can be started.
-            If None, set current time. A task will not be started before this
+            If None, set current time. For consistency the time is
+            from the database clock. A task will not be started before this
             time.
         Returns
         -------
@@ -230,8 +230,6 @@ class TaskQueue:
             List of random UUIDs that were generated for this task.
             The order is the same of the given tasks
         """
-        if can_start_at is None:
-            can_start_at = datetime.now(UTC)
         # make sure the timeout is an actual number, otherwise we'll run
         # into problems later when we calculate the actual deadline
         lease_timeout = float(lease_timeout)
@@ -253,7 +251,9 @@ class TaskQueue:
                         lease_timeout,
                         can_start_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    VALUES (
+                        %s, %s, %s, %s, %s, COALESCE(%s, current_timestamp)
+                    )
                 """
                     ).format(sql.Identifier(self._table_name)),
                     (
@@ -273,8 +273,8 @@ class TaskQueue:
         """Get a task from the task queue (non-blocking).
 
         This statement marks the next available task in the queue as
-        "processing" and returns its ID and task details. The query
-        uses a FOR UPDATE SKIP LOCKED clause to lock the selected
+        started (being processed) and returns its ID and task details.
+        The query uses a FOR UPDATE SKIP LOCKED clause to lock the selected
         task so that other workers can't select the same task simultaneously.
 
         After executing the query, the method fetches the result using
@@ -291,7 +291,7 @@ class TaskQueue:
             >>> taskqueue.complete(task_id)
 
         After some time (i.e. `lease_timeout`) tasks expire and are
-        marked as not processing and the TTL is decreased by
+        marked as not being processed and the TTL is decreased by
         one. If TTL is still > 0 the task will be retried.
 
         Note, this method is non-blocking, i.e. it returns immediately
@@ -525,7 +525,7 @@ class TaskQueue:
     ) -> Tuple[Optional[str], Optional[int]]:
         """
         Given the id of an expired task, it tries to reschedule it by
-        marking it as not processing, resetting the deadline
+        marking it as not started, resetting the deadline
         and decreasing TTL by one. It returns None if the task is
         already updated (or being updated) by another worker.
 
@@ -579,18 +579,29 @@ class TaskQueue:
     def _deserialize(self, blob: str) -> Any:
         return json.loads(blob)
 
-    def reschedule(self, task_id: Optional[UUID]) -> None:
-        """Move a task back from the processing- to the task queue.
+    def reschedule(
+        self,
+        task_id: UUID,
+        decrease_ttl: Optional[bool] = False,
+    ) -> None:
+        """Move a task back from being processed to the task queue.
 
         Workers can use this method to "drop" a work unit in case of
-        eviction.
+        eviction (because of an external issue like terminating a machine
+        by AWS and not because of a failure).
+        Rescheduled work units are immediately available for processing again,
+        and unless decrease_ttl is set to True, the TTL is not modified.
 
-        This function does not modify the TTL.
+        This function can optionally modify the TTL, setting decrease_ttl to
+        True. This allows to handle a failure quickly without waiting the
+        lease_timeout.
 
         Parameters
         ----------
-        task_id : str
+        task_id : UUID
             the task ID
+        decrease_ttl : bool
+            If True, decrease the TTL by one
 
         Raises
         ------
@@ -602,13 +613,17 @@ class TaskQueue:
         if not isinstance(task_id, UUID):
             raise ValueError("task_id must be a UUID")
         logger.info(f"Rescheduling task {task_id}..")
+        decrease_ttl_sql = ""
+        if decrease_ttl:
+            decrease_ttl_sql = "ttl = ttl - 1,"
+
         conn = self.conn
         with conn.cursor() as cur:
             cur.execute(
                 sql.SQL(
                     """
                 UPDATE {}
-                SET started_at = NULL
+                SET {} started_at = NULL
                 WHERE id = (
                     SELECT id
                     FROM {}
@@ -619,6 +634,7 @@ class TaskQueue:
                 RETURNING id;"""
                 ).format(
                     sql.Identifier(self._table_name),
+                    sql.SQL(decrease_ttl_sql),
                     sql.Identifier(self._table_name),
                 ),
                 (task_id,),

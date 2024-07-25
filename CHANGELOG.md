@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.0 - 2024-07-25
+
+* The `reschedule()` method has an optional parameter to decrease the TTL if set to True (False by default).
+* The `add()` and `add_many()` methods set the `can_start_at` by default to the current time of the database clock, not Python, for consistency.
+
 ## 1.1.0 - 2024-07-01
 
 * The `complete()` method now returns the count of updated tasks, 0 if it was already completed

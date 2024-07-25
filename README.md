@@ -114,17 +114,16 @@ It uses row level locks of postgres to mimic the atomic pop and atomic push of r
 
 ```sql
 UPDATE task_queue
-SET processing = true,
-    deadline =
-        current_timestamp + CAST(lease_timeout || ' seconds' AS INTERVAL)
+SET started_at = current_timestamp
 WHERE id = (
     SELECT id
     FROM task_queue
     WHERE completed_at IS NULL
-        AND processing = false
+        AND started_at IS NULL
         AND queue_name = <your_queue_name>
         AND ttl > 0
-    ORDER BY created_at
+        AND can_start_at <= current_timestamp
+    ORDER BY can_start_at
     FOR UPDATE SKIP LOCKED
     LIMIT 1
 )
@@ -137,10 +136,11 @@ Let's say two workers try to get a new task at the same time, assuming that they
 SELECT id
 FROM task_queue
 WHERE completed_at IS NULL
-    AND processing = false
+    AND started_at IS NULL
     AND queue_name = <your_queue_name>
     AND ttl > 0
-ORDER BY created_at
+    AND can_start_at <= current_timestamp
+ORDER BY can_start_at
 ```
 
 The first worker locks the row with the `FOR UPDATE` clause until the update is completed and committed. If we hadn't used the `SKIP LOCKED` clause, the second worker would have seen the same row and waited for the first worker to finish the update. However, since the first worker already updated it, the subquery would no longer be valid, and the second worker would return zero rows because `WHERE id = NULL`.
