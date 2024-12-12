@@ -14,7 +14,7 @@ from typing import (
     Sequence,
 )
 
-from psycopg import sql, connect
+from psycopg import sql, connect, Connection
 
 # supported only from 3.11 onwards:
 # from datetime import UTC
@@ -69,19 +69,28 @@ class TaskQueue:
         # called when ttl <= 0 for a task
         self.ttl_zero_callback = ttl_zero_callback
 
-        self.connect()
+        self.conn = self.connect()
         if create_table:
             self._create_queue_table()
 
         if reset:
             self._reset()
 
+    def get_connection(self):
+        connection = connect(self._dsn)
+        with connection.cursor() as cur:
+            cur.execute("SELECT 1+1")
+            cur.fetchone()
+
+        return connection
+
     def connect(self) -> None:
         """
         Establish a connection to Postgres.
         If a connection already exists, it's overwritten.
         """
-        self.conn = connect(self._dsn)
+        if self.conn is None or self.conn.closed:
+            self.conn = self.get_connection()
 
     def _create_queue_table(self) -> None:
         """
