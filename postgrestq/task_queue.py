@@ -83,7 +83,7 @@ class TaskQueue:
         """
         # if self.conn is None or self.conn.closed:
             # self.conn = self.get_connection()
-        self.pool = ConnectionPool(self._dsn, open=True, min_size=1, max_size=1)
+        self.pool = ConnectionPool(self._dsn, open=True, min_size=1)
         # This will block the use of the pool until min_size connections
         # have been acquired
         self.pool.wait()
