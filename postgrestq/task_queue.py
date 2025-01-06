@@ -191,7 +191,8 @@ class TaskQueue:
                         lease_timeout,
                         can_start_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, COALESCE(%s, current_timestamp))
+                    VALUES (%s, %s, %s, %s, %s,
+                    COALESCE(%s, current_timestamp))
                 """
                     ).format(sql.Identifier(self._table_name)),
                     (
@@ -487,7 +488,8 @@ class TaskQueue:
                         AND started_at IS NOT NULL
                         AND queue_name = %s
                         AND (
-                            started_at + (lease_timeout || ' seconds')::INTERVAL
+                            started_at +
+                            (lease_timeout || ' seconds')::INTERVAL
                             ) < current_timestamp
                     ORDER BY can_start_at;
                 """
