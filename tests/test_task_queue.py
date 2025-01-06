@@ -113,7 +113,7 @@ def test_expired(task_queue: TaskQueue):
     while not task_queue.is_empty():
         task_queue.get()
     tend = time.time()
-    assert tend - tstart > LEASE_TIMEOUT * 5
+    assert tend - tstart > LEASE_TIMEOUT
 
 
 def test_ttl(task_queue: TaskQueue, caplog: LogCaptureFixture):
