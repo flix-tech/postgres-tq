@@ -78,15 +78,14 @@ class TaskQueue:
 
     def connect(self) -> None:
         """
-        Establish a connection to Postgres.
-        If a connection already exists, it's overwritten.
+        Creates a ConnectionPool and waits until a connection to Postgres is
+        established.
         """
-        # if self.conn is None or self.conn.closed:
-            # self.conn = self.get_connection()
-        self.pool = ConnectionPool(self._dsn, open=True, min_size=1)
+        self.pool = ConnectionPool(self._dsn, open=True, min_size=2)
         # This will block the use of the pool until min_size connections
         # have been acquired
         self.pool.wait()
+        logger.info("ConnectionPool is ready")
 
     def _create_queue_table(self) -> None:
         """
@@ -439,7 +438,7 @@ class TaskQueue:
                 if count == 0:
                     logger.info(f"Task {task_id} was already completed")
 
-                conn.commit()
+            conn.commit()
         return count
 
     def is_empty(self) -> bool:
@@ -575,7 +574,6 @@ class TaskQueue:
                     ),
                 )
                 updated_row = cur.fetchone()
-                conn.commit()
                 if updated_row is None:
                     return None, None
 
