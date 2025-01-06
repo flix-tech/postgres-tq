@@ -82,7 +82,7 @@ def test_is_empty(task_queue: TaskQueue):
 
 def test_complete(task_queue: TaskQueue):
     # boring case
-    task_queue.add({"foo": 1}, LEASE_TIMEOUT, ttl=1)
+    task_queue.add({"foo": 1}, LEASE_TIMEOUT + 0.1, ttl=1)
     _, id_, qname = task_queue.get()
     assert not task_queue.is_empty()
     assert qname == "test_queue"
@@ -100,7 +100,7 @@ def test_complete(task_queue: TaskQueue):
 
 
 def test_expired(task_queue: TaskQueue):
-    task_queue.add({"foo": 1}, LEASE_TIMEOUT, ttl=1)
+    task_queue.add({"foo": 1}, LEASE_TIMEOUT + 0.1, ttl=1)
     task_queue.get()
     assert not task_queue.is_empty()
     time.sleep(LEASE_TIMEOUT + 0.1)
@@ -113,7 +113,7 @@ def test_expired(task_queue: TaskQueue):
     while not task_queue.is_empty():
         task_queue.get()
     tend = time.time()
-    assert tend - tstart > LEASE_TIMEOUT
+    assert tend - tstart > LEASE_TIMEOUT * 5
 
 
 def test_ttl(task_queue: TaskQueue, caplog: LogCaptureFixture):
