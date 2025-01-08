@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.1 - 2025-01-08
+
+* Use a ConnectionPool to connect to the Database instead of a single connection.
+
 ## 1.2.0 - 2024-07-25
 
 * The `reschedule()` method has an optional parameter to decrease the TTL if set to True (False by default).

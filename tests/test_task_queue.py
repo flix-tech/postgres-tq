@@ -21,7 +21,10 @@ from postgrestq import TaskQueue
 POSTGRES_DSN = os.environ.get(
     "POSTGRES_DSN", "postgresql://postgres:password@localhost:15432/postgres"
 )  # noqa
-LEASE_TIMEOUT = 0.1
+# We set the lease timeout to 2 seconds, because if the database is slow
+# the timeout would be reached while we are still getting the tasks and
+# the tests fail.
+LEASE_TIMEOUT = 2
 
 logger = logging.getLogger(__name__)
 
