@@ -21,7 +21,10 @@ from postgrestq import TaskQueue
 POSTGRES_DSN = os.environ.get(
     "POSTGRES_DSN", "postgresql://postgres:password@localhost:15432/postgres"
 )  # noqa
-LEASE_TIMEOUT = 0.1
+# We set the lease timeout to 2 seconds, because if the database is slow
+# the timeout would be reached while we are still getting the tasks and
+# the tests fail.
+LEASE_TIMEOUT = 2
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +85,7 @@ def test_is_empty(task_queue: TaskQueue):
 
 def test_complete(task_queue: TaskQueue):
     # boring case
-    task_queue.add({"foo": 1}, LEASE_TIMEOUT + 0.1, ttl=1)
+    task_queue.add({"foo": 1}, LEASE_TIMEOUT, ttl=1)
     _, id_, qname = task_queue.get()
     assert not task_queue.is_empty()
     assert qname == "test_queue"
@@ -100,7 +103,7 @@ def test_complete(task_queue: TaskQueue):
 
 
 def test_expired(task_queue: TaskQueue):
-    task_queue.add({"foo": 1}, LEASE_TIMEOUT + 0.1, ttl=1)
+    task_queue.add({"foo": 1}, LEASE_TIMEOUT, ttl=1)
     task_queue.get()
     assert not task_queue.is_empty()
     time.sleep(LEASE_TIMEOUT + 0.1)
